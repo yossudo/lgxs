@@ -1,0 +1,37 @@
+# ビルド出力 (Debug / Release フォルダなど)
+Debug/
+Release/
+*.map
+*.elf
+*.mot
+*.hex
+*.bin
+*.lst
+*.srec
+
+# 一時ファイル / 中間ファイル
+*.o
+*.obj
+*.d
+*.su
+*.bak
+*.tmp
+*.log
+
+# IDE / ワークスペース関連 (e² studio / Eclipse系)
+.settings/
+.metadata/
+.project
+.cproject
+
+# 自動生成される FSP 設定出力
+src/hal_data.c
+src/hal_data.h
+
+# OS依存
+.DS_Store
+Thumbs.db
+
+# Pythonやスクリプト実行用キャッシュ
+__pycache__/
+*.pyc
