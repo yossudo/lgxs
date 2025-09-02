@@ -284,6 +284,14 @@
       <description>General PWM Timer</description>
       <originalPack>Renesas.RA.5.9.0.pack</originalPack>
     </component>
+    <component apiversion="" class="CMSIS" condition="" group="CMSIS5" subgroup="DSP" variant="" vendor="Arm" version="1.16.2+fsp.5.9.0">
+      <description>Arm DSP Library Source</description>
+      <originalPack>Arm.CMSIS-DSP.1.16.2+fsp.5.9.0.pack</originalPack>
+    </component>
+    <component apiversion="" class="CMSIS" condition="" group="CMSIS5" subgroup="NN" variant="" vendor="Arm" version="6.0.0+fsp.5.9.0">
+      <description>Arm NN Library Source</description>
+      <originalPack>Arm.CMSIS-NN.6.0.0+fsp.5.9.0.pack</originalPack>
+    </component>
   </raComponentSelection>
   <raElcConfiguration/>
   <raIcuConfiguration/>
@@ -466,6 +474,8 @@
       <property id="module.driver.timer.gtioca_disable_setting" value="module.driver.timer.gtioca_disable_setting.gtioc_disable_prohibited"/>
       <property id="module.driver.timer.gtiocb_disable_setting" value="module.driver.timer.gtiocb_disable_setting.gtioc_disable_prohibited"/>
     </module>
+    <module id="module.arm.cmsis5.dsp.183847762"/>
+    <module id="module.arm.cmsis5.nn.1820891923"/>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
       <stack module="module.driver.adc_on_adc.1400034532"/>
@@ -474,6 +484,10 @@
       </stack>
       <stack module="module.driver.i3c_on_i3c.1690923085"/>
       <stack module="module.driver.timer_on_gpt.1347817059"/>
+      <stack module="module.arm.cmsis5.dsp.183847762"/>
+      <stack module="module.arm.cmsis5.nn.1820891923">
+        <stack module="module.arm.cmsis5.dsp.183847762" requires="module.arm.cmsis5.nn.requires.dsp"/>
+      </stack>
     </context>
     <config id="config.driver.adc">
       <property id="config.driver.adc.param_checking_enable" value="config.driver.adc.param_checking_enable.bsp"/>

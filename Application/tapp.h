@@ -5,12 +5,13 @@
  *      Author: yoshi
  */
 
-#ifndef TIMU_H_
-#define TIMU_H_
+#ifndef TAPP_H_
+#define TAPP_H_
 
 #include "user_common.h"
 
-IMPORT void task_timu(INT stacd, void *exinf);
+// タスクメイン関数
+IMPORT void task_tapp(INT stacd, void *exinf);
 
 
-#endif /* TIMU_H_ */
+#endif /* TAPP_H_ */

@@ -1,8 +1,13 @@
-/*
- * user_res.h
- * ユーザ定義リソース（タスクID・メールボックスID・メモリプールID・メッセージ構造体 等）
+/**
+ * ユーザリソースヘッダ
+ *
+ * ユーザ定義のT-Kernelリソース定義（タスクID・メールボックスID・メモリプールID・メッセージ構造体 等）
+ *
+ * @file
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
  */
-
 #ifndef USER_RES_H_
 #define USER_RES_H_
 
@@ -65,8 +70,8 @@ typedef enum {
     // 追加はここに
 } mpf_id_t;
 
-#define MPFNUM_LARGE  8     // 同時に4通の大きなデータを送れる想定
-#define MPFSZ_LARGE  2048
+#define MPFNUM_LARGE  4     // 同時に4通の大きなデータを送れる想定
+#define MPFSZ_LARGE  ((1024 * sizeof(UH)) + 64)
 #define MPFNUM_SMALL  16    // 小メッセージは多数送信可能
 #define MPFSZ_SMALL 32
 
@@ -77,8 +82,7 @@ IMPORT ER create_mem_pools(void);
  *------------------------------------------*/
 typedef enum {
     MSGID_NONE = 0,
-    MSGID_TIMU_REQ,     // TIMU→TAPP：MPU9250データ塊送信要求
-    MSGID_TIMU_RES,     // TAPP→TIMU：MPU9250データ塊送信応答
+    MSGID_TIMU_IND,     // TIMU→TAPP：MPU9250データ塊送信通知
     MSGID_TAI_REQ,      // TAPP→TAI：推論要求
     MSGID_TAI_RES,      // TAI→TAPP：推論応答
     MSGID_TNET_REQ,     // TAPP→TNET：ネットワーク送信要求
@@ -100,23 +104,25 @@ typedef struct {
     UB pyload;       // ペイロードの先頭データ
 } user_msg_t;
 
-typedef struct {
-    SYSTIM tim;
-    UH accz[1024];
-} msg_imu_req_t;
+#define IMU_REC_MAX 1024
 
 typedef struct {
-    UH accz[16];
+    SYSTIM tim;
+    UH accz[IMU_REC_MAX];
+} msg_imu_ind_t;
+
+typedef struct {
+    SYSTIM tim;
+    UH accz[IMU_REC_MAX];
 } msg_ai_req_t;
 
 typedef struct {
-    UH accz[16];
+    SYSTIM tim;
+    UH accz[IMU_REC_MAX];
 } msg_net_req_t;
 
 
 #define GPT_INTNO   GPT0_COUNTER_OVERFLOW_IRQn
-#define SEMID_TIMU  1  // タスク通知セマフォID
-
 
 
 #endif /* USER_RES_H_ */

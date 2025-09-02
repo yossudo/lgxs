@@ -1,3 +1,13 @@
+/**
+ * ユーザ共通ヘッダ
+ *
+ * アプリケーション全体で使用できるマクロ
+ *
+ * @file
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
+ */
 #ifndef _USER_COMMON_H_
 #define _USER_COMMON_H_
 

@@ -11,7 +11,6 @@
 #include "user_res.h"
 #include "hal_data.h"
 #include <string.h>
-#include "tmpu_tsk.h.old"  // ← 追加
 
 #if 0
 

@@ -1,10 +1,13 @@
-/*
- * user_res.c
+/**
+ * ユーザリソースの生成
  *
- *  Created on: 2025/07/05
- *      Author: yoshi
+ * ユーザ定義のT-Kernelリソースを生成
+ *
+ * @file
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
  */
-
 #include <tk/tkernel.h>
 #include "user_common.h"
 #include "user_res.h"
@@ -13,6 +16,7 @@
 #include "timu.h"
 #include "tnet.h"
 
+// TCB
 typedef struct {
     ID tskid;
     PRI priority;
@@ -21,8 +25,14 @@ typedef struct {
 } task_def_t;
 
 
-
-
+/**
+ * タスクの生成
+ *
+ * タスクを生成する
+ * @return 処理結果
+ * @retval E_OK 成功
+ * @retval !E_OK エラー(APIのエラー値)
+ */
 EXPORT ER create_tasks(void) {
     ER ercd;
     T_CTSK ctsk;
@@ -55,6 +65,14 @@ EXPORT ER create_tasks(void) {
 }
 
 
+/**
+ * メールボックスの生成
+ *
+ * メールボックスを生成する
+ * @return 処理結果
+ * @retval E_OK 成功
+ * @retval !E_OK エラー(APIのエラー値)
+ */
 EXPORT ER create_mailboxes(void) {
     ER ercd;
 
@@ -75,6 +93,15 @@ EXPORT ER create_mailboxes(void) {
     return E_OK;
 }
 
+
+/**
+ * 固定長メモリプールの生成
+ *
+ * 固定長メモリプールを生成する
+ * @return 処理結果
+ * @retval E_OK 成功
+ * @retval !E_OK エラー(APIのエラー値)
+ */
 EXPORT ER create_mem_pools(void) {
     ER ercd;
 

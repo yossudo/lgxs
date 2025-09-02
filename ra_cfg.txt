@@ -652,6 +652,8 @@ FSP Configuration
     Pin Output Support: Disabled
     Write Protect Enable: Disabled
     
+  Module "Arm CMSIS DSP Library Source"
+  Module "Arm CMSIS NN Library Source"
   HAL
     Instance "g_ioport I/O Port (r_ioport)"
       Name: g_ioport
@@ -830,3 +832,6 @@ FSP Configuration
       Extra Features: Output Disable: GTIOCA Disable Setting: Disable Prohibited
       Extra Features: Output Disable: GTIOCB Disable Setting: Disable Prohibited
       
+    Instance "Arm CMSIS DSP Library Source"
+    Instance "Arm CMSIS NN Library Source"
+      Instance "Arm CMSIS DSP Library Source"
