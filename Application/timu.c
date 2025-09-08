@@ -17,7 +17,6 @@
 // 定数
 #define TIMU_DEVNAME    "htiica"            // I2C device name
 #define IMU_ADDR        0x68                // I2C devide address
-#define TIMU_INTERVAL_MS ((TMO)(10 - 5))    // 100Hz = 10ms周期
 #define CYC_PERIOD_MS 10                    // 100Hz = 10ms周期
 
 // MPU9250 レジスタ
