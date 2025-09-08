@@ -66,8 +66,8 @@ extern const ether_instance_t g_ether0;
 extern ether_instance_ctrl_t g_ether0_ctrl;
 extern const ether_cfg_t g_ether0_cfg;
 
-#ifndef ether_callback
-void ether_callback(ether_callback_args_t *p_args);
+#ifndef NULL
+void NULL(ether_callback_args_t *p_args);
 #endif
 /** ADC on ADC Instance. */
 extern const adc_instance_t g_adc0;

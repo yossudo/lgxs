@@ -647,13 +647,13 @@ FSP Configuration
     Slave Support: Enabled
     Error Recovery Procedure: Support Error Recovery Version 2 Only.
     
+  Module "Arm CMSIS DSP Library Source"
+  Module "Arm CMSIS NN Library Source"
   Module "Timer, General PWM (r_gpt)"
     Parameter Checking: Default (BSP)
     Pin Output Support: Disabled
     Write Protect Enable: Disabled
     
-  Module "Arm CMSIS DSP Library Source"
-  Module "Arm CMSIS NN Library Source"
   HAL
     Instance "g_ioport I/O Port (r_ioport)"
       Name: g_ioport
@@ -718,7 +718,7 @@ FSP Configuration
       Interrupts: EESR event: RFOF, RDE, FR, TFUF, TDE, TC
       Interrupts: ECSR event: 
       Interrupts: Interrupt priority: Priority 12
-      Interrupts: Callback: ether_callback
+      Interrupts: Callback: NULL
       
       Instance "g_ether_phy0 Ethernet (r_ether_phy)"
         Name: g_ether_phy0
@@ -780,6 +780,9 @@ FSP Configuration
       Interrupts: Interrupt Priority: Priority 12
       Interrupts: Error and Event Interrupt Priority: Priority 12
       
+    Instance "Arm CMSIS DSP Library Source"
+    Instance "Arm CMSIS NN Library Source"
+      Instance "Arm CMSIS DSP Library Source"
     Instance "g_timer0 Timer, General PWM (r_gpt)"
       General: Name: g_timer0
       General: Channel: 0
@@ -832,6 +835,3 @@ FSP Configuration
       Extra Features: Output Disable: GTIOCA Disable Setting: Disable Prohibited
       Extra Features: Output Disable: GTIOCB Disable Setting: Disable Prohibited
       
-    Instance "Arm CMSIS DSP Library Source"
-    Instance "Arm CMSIS NN Library Source"
-      Instance "Arm CMSIS DSP Library Source"

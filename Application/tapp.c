@@ -75,6 +75,7 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
         }
         else if (pum->msgid == MSGID_TAI_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
+            send_net_req(pum->result, NULL);
         }
         else if (pum->msgid == MSGID_TNET_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );

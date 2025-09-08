@@ -235,7 +235,7 @@ const ether_cfg_t g_ether0_cfg =
 
   .interrupt_priority = (12),
 
-  .p_callback = ether_callback,
+  .p_callback = NULL,
   .p_ether_phy_instance = &g_ether_phy0, .p_context = NULL, .p_extend = &g_ether0_extended_cfg_t, };
 
 /* Instance structure to use this module. */

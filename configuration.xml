@@ -360,7 +360,7 @@
       <property id="module.driver.ether.eesr_event_mask" value="module.driver.ether.eesr_event_mask.rfof,module.driver.ether.eesr_event_mask.rde,module.driver.ether.eesr_event_mask.fr,module.driver.ether.eesr_event_mask.tfuf,module.driver.ether.eesr_event_mask.tde,module.driver.ether.eesr_event_mask.tc"/>
       <property id="module.driver.ether.ecsr_event_mask" value=""/>
       <property id="module.driver.ether.interrupt_priority" value="board.icu.common.irq.priority12"/>
-      <property id="module.driver.ether.p_callback" value="ether_callback"/>
+      <property id="module.driver.ether.p_callback" value="NULL"/>
     </module>
     <module id="module.driver.ether_phy_on_ether_phy.443834363">
       <property id="module.driver.ether_phy.name" value="g_ether_phy0"/>
@@ -422,7 +422,9 @@
       <property id="module.driver.i3c.ipl" value="board.icu.common.irq.priority12"/>
       <property id="module.driver.i3c.eei_ipl" value="board.icu.common.irq.priority12"/>
     </module>
-    <module id="module.driver.timer_on_gpt.1347817059">
+    <module id="module.arm.cmsis5.dsp.183847762"/>
+    <module id="module.arm.cmsis5.nn.1820891923"/>
+    <module id="module.driver.timer_on_gpt.92823623">
       <property id="module.driver.timer.name" value="g_timer0"/>
       <property id="module.driver.timer.channel" value="0"/>
       <property id="module.driver.timer.mode" value="module.driver.timer.mode.mode_periodic"/>
@@ -474,8 +476,6 @@
       <property id="module.driver.timer.gtioca_disable_setting" value="module.driver.timer.gtioca_disable_setting.gtioc_disable_prohibited"/>
       <property id="module.driver.timer.gtiocb_disable_setting" value="module.driver.timer.gtiocb_disable_setting.gtioc_disable_prohibited"/>
     </module>
-    <module id="module.arm.cmsis5.dsp.183847762"/>
-    <module id="module.arm.cmsis5.nn.1820891923"/>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
       <stack module="module.driver.adc_on_adc.1400034532"/>
@@ -483,11 +483,11 @@
         <stack module="module.driver.ether_phy_on_ether_phy.443834363" requires="module.driver.ether.requires.ether_phy"/>
       </stack>
       <stack module="module.driver.i3c_on_i3c.1690923085"/>
-      <stack module="module.driver.timer_on_gpt.1347817059"/>
       <stack module="module.arm.cmsis5.dsp.183847762"/>
       <stack module="module.arm.cmsis5.nn.1820891923">
         <stack module="module.arm.cmsis5.dsp.183847762" requires="module.arm.cmsis5.nn.requires.dsp"/>
       </stack>
+      <stack module="module.driver.timer_on_gpt.92823623"/>
     </context>
     <config id="config.driver.adc">
       <property id="config.driver.adc.param_checking_enable" value="config.driver.adc.param_checking_enable.bsp"/>
