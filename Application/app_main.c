@@ -393,7 +393,7 @@ void ether_send_and_receive_test(void)
 #endif
 
 
-#if 1
+#if 0
 #include <string.h>
 #include <stdint.h>
 #include "r_ether_api.h"
@@ -527,7 +527,7 @@ void send_udp_packet(ID dd)
 
 #endif
 
-#if 1
+#if 0
 static bsp_leds_t s_leds;
 void gpt_handler(UINT intno);
 #endif
@@ -570,7 +570,7 @@ EXPORT INT usermain(void)
     }
 #endif
 
-#if 0
+#if 1
     APP_PRINT("=== Ether App Test Start ===\n");
 
 #if 0
