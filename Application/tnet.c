@@ -193,7 +193,7 @@ EXPORT void task_tnet(INT stacd, void *exinf)
 {
     (void)stacd; (void)exinf;
 
-    APP_PRINT("[TNET] started\n");
+    APP_PRINT("[TNET started]\n");
 
     init_task_tnet();
 

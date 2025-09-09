@@ -11,6 +11,7 @@
  * @author: Things Base y.sudo
  */
 #include "tapp.h"
+#include "tled.h"
 
 
 // 関数プロトタイプ
@@ -18,6 +19,7 @@ LOCAL void init_task_tapp(void);
 EXPORT void task_tapp(INT stacd, void *exinf);
 LOCAL ER send_ai_req(INT result, msg_ai_req_t *data);
 LOCAL ER send_net_req(INT result, msg_net_req_t *data);
+LOCAL ER send_led_req(INT result, UB led, UB pattern, W blink_count);
 
 
 /**
@@ -29,6 +31,12 @@ LOCAL ER send_net_req(INT result, msg_net_req_t *data);
  */
 LOCAL void init_task_tapp(void)
 {
+
+    // 周辺タスクが上がるまでちょっと待つ
+    tk_dly_tsk(100);
+
+    send_led_req(TRUE, TLED_GREEN, TLED_PAT_ON, 0);
+
     return;
 }
 
@@ -72,12 +80,17 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             APP_PRINT("\n");
 
             send_ai_req(TRUE, (msg_ai_req_t *)mir);
+            send_led_req(TRUE, TLED_BLUE, TLED_PAT_BLINK_FAST, 5);
+
         }
         else if (pum->msgid == MSGID_TAI_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
             send_net_req(pum->result, NULL);
         }
         else if (pum->msgid == MSGID_TNET_RES) {
+            APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
+        }
+        else if (pum->msgid == MSGID_TLED_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
         }
 
@@ -178,4 +191,51 @@ LOCAL ER send_net_req(INT result, msg_net_req_t *data)
     return E_OK;
 }
 
+
+/**
+ * MSGID_TLED_REQを送信
+ *
+ * LED制御要求をTLEDへ送信
+ * @param[in] led LED種
+ * @param[in] pattern 点灯パターン
+ * @param[in] blink_count 点滅回数
+ * @return 処理結果
+ * @retval E_OK 成功
+　* @retval !E_OK エラー(APIのエラー値)
+ */
+LOCAL ER send_led_req(INT result, UB led, UB pattern, W blink_count)
+{
+    ER er;
+    user_msg_t *pum = NULL;
+    msg_led_req_t *mlr = NULL;
+
+    // 固定長メモリを取得
+    er = tk_get_mpf(MPFID_SMALL, (void **)&pum, TMO_FEVR);
+    if (er != E_OK) {
+        APP_ERR_PRINT("error get_mpf:%d", er);
+       return er;
+    }
+
+    // メッセージ構造体を作成
+    memset(pum, 0x00, sizeof(user_msg_t));
+    pum->msgid  = MSGID_TLED_REQ;
+    pum->srctsk = TSKID_TAPP;
+    pum->dsttsk = TSKID_TLED;
+    pum->result = (UH)result;
+    pum->mpfid  = MPFID_SMALL;
+
+    mlr = (msg_led_req_t *)&pum->pyload;
+    mlr->led = led;
+    mlr->pattern = pattern;
+    mlr->blink_count = blink_count;
+
+    // メッセージ送信
+    er = tk_snd_mbx( MBXID_TLED, (T_MSG *)pum );
+    if (er != E_OK) {
+        APP_ERR_PRINT("error snd_mbx:%d\n", er);
+        return er;
+    }
+
+    return E_OK;
+}
 

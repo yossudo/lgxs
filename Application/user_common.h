@@ -11,6 +11,8 @@
 #ifndef _USER_COMMON_H_
 #define _USER_COMMON_H_
 
+#include <string.h>
+
 #include <tk/tkernel.h>
 #include "common_utils.h"
 #include "user_res.h"

@@ -20,6 +20,7 @@ typedef enum {
     TSKID_TAI,              // AI推論タスク
     TSKID_TIMU,             // 慣性センサ(MPU9250)中間タスク
     TSKID_TNET,             // ネットワーク通信中間タスク
+    TSKID_TLED,             // LED制御タスク
     // 追加はここに
     TSKID_NUM               // タスク数（末尾）
 } task_id_t;
@@ -30,9 +31,10 @@ typedef enum {
  *------------------------------------------*/
 typedef enum {
     TPRI_TIMU  = 5,         // IMUデータ取得（正確に100Hzサンプリングさせたいため最高優先度で動作）
-    TPRI_TNET  = 8,         // ネットワーク通信（UDP通知を即時処理）
-    TPRI_TAI   = 10,        // AI推論（FFT・AI推論を含む重処理）
-    TPRI_TAPP  = 12         // アプリケーション制御（全体統括）
+    TPRI_TLED  = 8,         // LED制御
+    TPRI_TNET  = 10,         // ネットワーク通信（UDP通知を即時処理）
+    TPRI_TAI   = 12,        // AI推論（FFT・AI推論を含む重処理）
+    TPRI_TAPP  = 20         // アプリケーション制御（全体統括）
 } task_pri_t;
 
 
@@ -43,6 +45,7 @@ typedef enum {
 #define STKSZ_TAI       4096
 #define STKSZ_TIMU      1024
 #define STKSZ_TNET      1024
+#define STKSZ_TLED      1024
 
 IMPORT ER create_tasks(void);
 
@@ -54,6 +57,7 @@ typedef enum {
     MBXID_TIMU,             // TIMUの受信用メールボックス
     MBXID_TAI,              // TAIの受信用メールボックス
     MBXID_TNET,             // TNETの受信用メールボックス
+    MBXID_TLED,             // TLEDの受信用メールボックス
     // 追加はここに
     MBXID_NUM
 } mbx_id_t;
@@ -87,6 +91,8 @@ typedef enum {
     MSGID_TAI_RES,      // TAI→TAPP：推論応答
     MSGID_TNET_REQ,     // TAPP→TNET：ネットワーク送信要求
     MSGID_TNET_RES,     // TNET→TAPP：ネットワーク送信応答
+    MSGID_TLED_REQ,     // TAPP→TLED：LED制御要求
+    MSGID_TLED_RES,     // TLED→TAPP：LED制御応答
     // 追加はここに
 } msg_id_t;
 
@@ -121,7 +127,14 @@ typedef struct {
     UH accz[IMU_REC_MAX];
 } msg_net_req_t;
 
+typedef struct {
+    UB         led;           /* tled_id_t */
+    UB         pattern;       /* tled_pattern_t */
+    W          blink_count;   /* 点滅回数: 1以上 / TLED_BLINK_INFINITE */
+} msg_led_req_t;
 
+// GPT周期カウンタ割込番号(オーバーフロー割込)
+// TIMUの10msタイマ処理で使用
 #define GPT_INTNO   GPT0_COUNTER_OVERFLOW_IRQn
 
 

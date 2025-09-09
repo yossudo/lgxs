@@ -15,6 +15,7 @@
 #include "tai.h"
 #include "timu.h"
 #include "tnet.h"
+#include "tled.h"
 
 // TCB
 typedef struct {
@@ -42,6 +43,7 @@ EXPORT ER create_tasks(void) {
         { TSKID_TAI,  TPRI_TAI,  STKSZ_TAI,  task_tai  },
         { TSKID_TIMU, TPRI_TIMU, STKSZ_TIMU, task_timu },
         { TSKID_TNET, TPRI_TNET, STKSZ_TNET, task_tnet },
+        { TSKID_TLED, TPRI_TLED, STKSZ_TLED, task_tled },
     };
 
     for (int i = 0; i < DIM(task_table); i++) {
@@ -81,6 +83,7 @@ EXPORT ER create_mailboxes(void) {
         { .mbxatr = TA_TFIFO }, // MBXID_TIMU
         { .mbxatr = TA_TFIFO }, // MBXID_TAI
         { .mbxatr = TA_TFIFO },  // MBXID_TNET
+        { .mbxatr = TA_TFIFO },  // MBXID_TLED
     };
 
     for (int i = 0; i < DIM(mbx_table); i++) {
