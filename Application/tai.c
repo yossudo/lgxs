@@ -8,165 +8,126 @@
  * @date 2025/7/5
  * @author: Things Base y.sudo
  */
+
+/*
+ * tai.c
+ * TAIタスク: FFT解析とAI推論
+ */
+
 #include "tai.h"
 
-#define FFT_SIZE 1024
-#define SAMPLE_FREQ_HZ 100.0f
-#define THRESH_FREQ_HZ 20.0f    // 例：20Hz以上を「異常」とみなす簡易ロジック
+/* === 定義 === */
+#define FFT_SIZE IMU_REC_MAX
+#define FFT_OUT_SIZE (FFT_SIZE / 2)
 
-static float input_f32[FFT_SIZE];
-static float output_mag[FFT_SIZE / 2];
+/* === FFT作業バッファ === */
+static float32_t fft_input[FFT_SIZE];
+static float32_t fft_output[FFT_SIZE];      // 複素数対で出力
+static float32_t fft_magnitude[FFT_OUT_SIZE];
 
+static arm_rfft_fast_instance_f32 rfft_instance;
 
-// 関数プロトタイプ
-LOCAL void init_task_tai(void);
-static void run_fft_and_infer(const UH *accz_raw);
-LOCAL ER send_ai_res(INT result);
-
-
-
-/**
- * タスク初期化
- *
- * タスクの初期化
- * @param なし
- * @return なし
- */
-LOCAL void init_task_tai(void)
+/* === 内部関数 === */
+static void perform_fft(const UH *accz, float32_t *magnitude)
 {
-    return;
+    for (int i = 0; i < FFT_SIZE; i++) {
+        fft_input[i] = (float32_t)accz[i];
+    }
+
+    // FFT実行
+    arm_rfft_fast_f32(&rfft_instance, fft_input, fft_output, 0);
+
+    // 複素数出力 → 振幅スペクトルに変換
+    for (int i = 0; i < FFT_OUT_SIZE; i++) {
+        float32_t real = fft_output[2 * i];
+        float32_t imag = fft_output[2 * i + 1];
+        magnitude[i] = sqrtf(real * real + imag * imag);
+    }
 }
 
+/* === AI推論ダミー関数 === */
+static int run_inference(const float32_t *magnitude)
+{
+    // TODO: 学習済みモデルへ置き換え
+    // 現状は「ピークが一定閾値を超えたら1、それ以外は0」とする簡易判定
+    float32_t max_val = 0.0f;
+    uint32_t max_idx = 0;
+    arm_max_f32(magnitude, FFT_OUT_SIZE, &max_val, &max_idx);
 
-/**
- * タスクメイン
- *
- * タスクのメイン処理
- * @param[in] stacd タスク起動時の開始コード
- * @param[in] exinf タスク起動時の拡張情報
- * @return なし
- */
-EXPORT void task_tai(INT stacd, void *exinf) {
+    if (max_val > 5000.0f) {
+        return 1;   // 異常傾向あり
+    } else {
+        return 0;   // 正常
+    }
+}
+
+/* === タスク本体 === */
+EXPORT void task_tai(INT stacd, void *exinf)
+{
+    ER ercd;
+    user_msg_t *pum = NULL;
+
+    // FFT初期化
+    arm_rfft_fast_init_f32(&rfft_instance, FFT_SIZE);
 
     APP_PRINT("[TAI started]\n");
 
-    // タスクの初期化
-    init_task_tai();
-
-    ER er;
-    user_msg_t *pum = NULL;
-    msg_ai_req_t *mar = NULL;
-
-    while(1) {
-        er = tk_rcv_mbx( MBXID_TAI, (T_MSG **)&pum, TMO_FEVR );
-        if (er != E_OK) {
-            APP_ERR_PRINT("error rcv_mbx:%d\n", er);
-            continue;
-        }
-        mar = (msg_ai_req_t *)&pum->pyload;
-
-        APP_PRINT( "rcv_mbx TAI:[%d]\n", pum->result );
-
-        for (int i =0; i < 16; i++) {
-            APP_PRINT("%d ", mar->accz[i]);
-        }
-        APP_PRINT("\n");
-
-        run_fft_and_infer(mar->accz);
-
-        er = tk_rel_mpf(pum->mpfid, pum);
-        if (er != E_OK) {
-            APP_ERR_PRINT("error rel_mpf:%d\n", er);
+    while (1) {
+        // メッセージ受信（TAPPからの要求待ち）
+        ercd = tk_rcv_mbx(MBXID_TAI, (T_MSG **)&pum, TMO_FEVR);
+        if (ercd != E_OK) {
+            APP_ERR_PRINT("[TAI] rcv_mbx err=%d\n", ercd);
             continue;
         }
 
-        //send_ai_res(TRUE);
+        if (pum->msgid == MSGID_TAI_REQ) {
+            const msg_imu_ind_t *preq = (const msg_imu_ind_t *)&pum->pyload;
 
+            // FFT計算
+            perform_fft(preq->accz, fft_magnitude);
+
+#if 0
+            // debug
+            APP_PRINT("%llu", SYSTIM_TO_UD(preq->tim));
+            for (int i = 0; i < FFT_OUT_SIZE; i++) {
+                char valstr[16];
+                sprintf(valstr, ",%.2f", fft_magnitude[i]);
+                APP_PRINT(valstr);
+            }
+            APP_PRINT("\n");
+#endif
+
+            // AI推論
+            int result = run_inference(fft_magnitude);
+
+
+            // 応答メッセージ作成
+            user_msg_t *pres;
+            ercd = tk_get_mpf(MPFID_MEDIUM, (void **)&pres, TMO_FEVR);
+            if (ercd != E_OK) {
+                APP_ERR_PRINT("[TAI] get_mpf err=%d\n", ercd);
+                tk_rel_mpf(pum->mpfid, pum);
+                continue;
+            }
+
+            pres->msgid = MSGID_TAI_RES;
+            pres->srctsk = TSKID_TAI;
+            pres->dsttsk = TSKID_TAPP;
+            pres->result = result;
+            pres->mpfid = MPFID_MEDIUM;
+            msg_ai_res_t *pout = (msg_ai_res_t *)&pres->pyload;
+            pout->tim = preq->tim;
+
+            memcpy(pout->spectrum, fft_magnitude, sizeof(float32_t) * FFT_OUT_SIZE);
+
+            // TAPPへ応答送信
+            tk_snd_mbx(MBXID_TAPP, (T_MSG *)pres);
+
+            APP_PRINT("[TAI] inference done: result=%d\n", result);
+        }
+
+        // 要求メモリ返却
+        tk_rel_mpf(pum->mpfid, pum);
     }
-
 }
 
-static void run_fft_and_infer(const UH *accz_raw)
-{
-    arm_rfft_fast_instance_f32 fft_inst;
-    arm_status status;
-
-    // 1. CMSIS-DSPのRFFT初期化
-    status = arm_rfft_fast_init_f32(&fft_inst, FFT_SIZE);
-    if (status != ARM_MATH_SUCCESS) {
-        APP_ERR_PRINT("FFT init failed\n");
-        return;
-    }
-
-    // 2. uint16_t → float変換（DCシフト除去のためmeanを引く）
-    float mean = 0.0f;
-    for (int i = 0; i < FFT_SIZE; i++) {
-        input_f32[i] = (float)accz_raw[i];
-        mean += input_f32[i];
-    }
-    mean /= FFT_SIZE;
-    for (int i = 0; i < FFT_SIZE; i++) {
-        input_f32[i] -= mean;
-    }
-
-    // 3. FFT実行
-    arm_rfft_fast_f32(&fft_inst, input_f32, input_f32, 0);
-
-    // 4. 振幅スペクトル（複素数→パワー）
-    arm_cmplx_mag_f32(input_f32, output_mag, FFT_SIZE / 2);
-
-    // 5. 最大成分の周波数を探索
-    float max_val = 0.0f;
-    uint32_t max_index = 0;
-    arm_max_f32(output_mag, FFT_SIZE / 2, &max_val, &max_index);
-
-    float max_freq = (float)max_index * (SAMPLE_FREQ_HZ / FFT_SIZE);
-    APP_PRINT("Dominant Freq = %.2f Hz\n", max_freq);
-
-    // 6. 簡易異常判定ロジック（後でAI推論に置換）
-    if (max_freq > THRESH_FREQ_HZ) {
-        send_ai_res(TRUE);  // 異常あり
-    } else {
-        send_ai_res(FALSE); // 異常なし
-    }
-}
-
-
-/**
- * MSGID_TAI_RESを送信
- *
- * AI判定応答データをtappへ送信
- * @param[in] result 結果
- * @return 処理結果
- * @retval E_OK 成功
-　* @retval !E_OK エラー(APIのエラー値)
- */
-LOCAL ER send_ai_res(INT result)
-{
-    ER er;
-    user_msg_t *pum = NULL;
-
-    // 固定長メモリを取得
-    er = tk_get_mpf(MPFID_SMALL, (void **)&pum, TMO_FEVR);
-    if (er != E_OK) {
-        APP_ERR_PRINT("error get_mpf:%d", er);
-       return er;
-    }
-
-    // メッセージ構造体を作成
-    memset(pum, 0x00, sizeof(user_msg_t));
-    pum->msgid  = MSGID_TAI_RES;
-    pum->srctsk = TSKID_TAI;
-    pum->dsttsk = TSKID_TAPP;
-    pum->result = (UH)result;
-    pum->mpfid  = MPFID_SMALL;
-
-    // メッセージ送信
-    er = tk_snd_mbx( MBXID_TAPP, (T_MSG *)pum );
-    if (er != E_OK) {
-        APP_ERR_PRINT("error snd_mbx:%d\n", er);
-        return er;
-    }
-
-    return E_OK;
-}

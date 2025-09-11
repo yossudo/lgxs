@@ -11,8 +11,11 @@
 
 #ifndef TAI_H_
 #define TAI_H_
+#include <math.h>
+
 #include "arm_math.h"
-#include "arm_const_structs.h"
+//#include "arm_const_structs.h"
+#include "arm_nnfunctions.h" // CMSIS-NN（将来モデル用）
 #include "user_common.h"
 
 // タスクメイン関数

@@ -18,7 +18,7 @@
 LOCAL void init_task_tapp(void);
 EXPORT void task_tapp(INT stacd, void *exinf);
 LOCAL ER send_ai_req(INT result, msg_ai_req_t *data);
-LOCAL ER send_net_req(INT result, msg_net_req_t *data);
+LOCAL ER send_net_req(INT result, SYSTIM tim, const float *spectrum, size_t spectrum_len);
 LOCAL ER send_led_req(INT result, UB led, UB pattern, W blink_count);
 
 
@@ -80,15 +80,17 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             APP_PRINT("\n");
 
             send_ai_req(TRUE, (msg_ai_req_t *)mir);
-            send_led_req(TRUE, TLED_BLUE, TLED_PAT_BLINK_FAST, 5);
+            send_led_req(TRUE, TLED_BLUE, TLED_PAT_BLINK_FAST, 3);
 
         }
         else if (pum->msgid == MSGID_TAI_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
-            send_net_req(pum->result, NULL);
+            msg_ai_res_t *pmar = (msg_ai_res_t *)&pum->pyload;
+            send_net_req(pum->result, pmar->tim, pmar->spectrum, IMU_REC_MAX /2);
         }
         else if (pum->msgid == MSGID_TNET_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
+            send_led_req(TRUE, TLED_RED, TLED_PAT_BLINK_SLOW, 1);
         }
         else if (pum->msgid == MSGID_TLED_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
@@ -157,14 +159,16 @@ LOCAL ER send_ai_req(INT result, msg_ai_req_t *data)
  * @retval E_OK 成功
 　* @retval !E_OK エラー(APIのエラー値)
  */
-LOCAL ER send_net_req(INT result, msg_net_req_t *data)
+LOCAL ER send_net_req(INT result, SYSTIM tim, const float *spectrum, size_t spectrum_len)
 {
     ER er;
     user_msg_t *pum = NULL;
-    msg_net_req_t *mnr = NULL;
+    msg_net_req_t *pmnr = NULL;
+
+    if (!spectrum || spectrum_len > (IMU_REC_MAX /2)) return E_PAR;
 
     // 固定長メモリを取得
-    er = tk_get_mpf(MPFID_LARGE, (void **)&pum, TMO_FEVR);
+    er = tk_get_mpf(MPFID_MEDIUM, (void **)&pum, TMO_FEVR);
     if (er != E_OK) {
         APP_ERR_PRINT("error get_mpf:%d", er);
        return er;
@@ -176,10 +180,11 @@ LOCAL ER send_net_req(INT result, msg_net_req_t *data)
     pum->srctsk = TSKID_TAPP;
     pum->dsttsk = TSKID_TNET;
     pum->result = (UH)result;
-    pum->mpfid  = MPFID_LARGE;
+    pum->mpfid  = MPFID_MEDIUM;
 
-    mnr = (msg_net_req_t *)&pum->pyload;
-    memcpy(mnr, data, sizeof(msg_net_req_t));
+    pmnr = (msg_net_req_t *)&pum->pyload;
+    pmnr->tim = tim;
+    memcpy(pmnr->spectrum, spectrum, spectrum_len * sizeof(float32_t));
 
     // メッセージ送信
     er = tk_snd_mbx( MBXID_TNET, (T_MSG *)pum );

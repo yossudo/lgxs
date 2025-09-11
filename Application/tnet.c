@@ -33,6 +33,23 @@
 #define SRC_PORT 12345
 #define DST_PORT 12345
 
+/* 送信CSVの設定（サイズ削減のため間引き等が必要なら調整） */
+#define LGXS_FS_HZ       (100.0f)                 /* サンプリング周波数 */
+#define LGXS_FFT_N       (1024)                   /* FFTポイント */
+#define LGXS_BIN_HZ      (LGXS_FS_HZ / LGXS_FFT_N)
+#define LGXS_DOWNSAMPLE  (1)                      /* 2,4,8… にするとCSV縮小 */
+#define LGXS_FLOAT_FMT   "%.3f"                   /* 小数フォーマット */
+
+/* SYSTIM → U64（μsなど）の変換。環境のマクロに合わせる。 */
+static inline unsigned long long systim_to_u64(SYSTIM t)
+{
+#ifdef SYSTIM_TO_UD
+    return (unsigned long long)SYSTIM_TO_UD(t);   /* 既存マクロがあるなら利用（例：μs） */
+#else
+    return (unsigned long long)(t);
+#endif
+}
+
 #pragma pack(1)
 typedef struct {
     uint8_t  dst_mac[6];
@@ -83,8 +100,8 @@ static uint16_t ip_checksum(uint16_t *buf, int len)
     return (uint16_t)(~sum);
 }
 
-/* T-Kernel デバイスディスクリプタを受け取り、AI結果をペイロードに載せてUDP送信 */
-static void send_udp_packet(ID dd, INT ai_result)
+/* 任意のpayloadをUDPで送る（生イーサ組み立て） */
+static ER send_udp_packet(ID dd, const uint8_t *payload, uint16_t payload_len)
 {
     /* イーサフレームの最大長を確保（十分に大きいワーク領域） */
     static uint8_t buffer[1500];
@@ -97,15 +114,11 @@ static void send_udp_packet(ID dd, INT ai_result)
     ether_header_t *eth = (ether_header_t *)buffer;
     ip_header_t    *ip  = (ip_header_t *)(eth + 1);
     udp_header_t   *udp = (udp_header_t *)(ip + 1);
-    uint8_t        *payload = (uint8_t *)(udp + 1);
+    uint8_t        *pld = (uint8_t *)(udp + 1);
 
-    /* ---- ペイロード生成（AI結果を文字列で送る） ---- */
-    /* 例: "LGXS AI=1\n" */
-    char msg[64];
-    int msg_len = snprintf(msg, sizeof(msg), "LGXS AI=%d\n", (int)ai_result);
-    if (msg_len < 0) msg_len = 0;
-    if (msg_len > (int)sizeof(msg)) msg_len = (int)sizeof(msg);
-    memcpy(payload, msg, (size_t)msg_len);
+    if ((sizeof(buffer) - (size_t)((uint8_t*)pld - buffer)) < payload_len) {
+        return E_PAR;
+    }
 
     /* ---- Ethernet ヘッダ ---- */
     memcpy(eth->dst_mac, dst_mac, 6);
@@ -115,7 +128,7 @@ static void send_udp_packet(ID dd, INT ai_result)
     /* ---- IP ヘッダ ---- */
     ip->ver_ihl  = 0x45;                 /* IPv4, IHL=5(20byte) */
     ip->tos      = 0;
-    ip->tot_len  = htons((uint16_t)(sizeof(ip_header_t) + sizeof(udp_header_t) + msg_len));
+    ip->tot_len  = htons((uint16_t)(sizeof(ip_header_t) + sizeof(udp_header_t) + payload_len));
     ip->id       = 0;
     ip->frag_off = 0;
     ip->ttl      = 64;
@@ -128,17 +141,47 @@ static void send_udp_packet(ID dd, INT ai_result)
     /* ---- UDP ヘッダ ---- */
     udp->src_port = htons(SRC_PORT);
     udp->dst_port = htons(DST_PORT);
-    udp->length   = htons((uint16_t)(sizeof(udp_header_t) + msg_len));
+    udp->length   = htons((uint16_t)(sizeof(udp_header_t) + payload_len));
     udp->checksum = 0;                   /* 今回は未計算(0)で送る */
+
+    /* ---- Payload ---- */
+    memcpy(pld, payload, payload_len);
 
     /* ---- 送信 ---- */
     uint16_t total_len = (uint16_t)(sizeof(ether_header_t) + sizeof(ip_header_t)
-                                    + sizeof(udp_header_t) + msg_len);
+                                    + sizeof(udp_header_t) + payload_len);
 
     SZ asize = 0;
-    tk_swri_dev(dd, 0, (char *)buffer, total_len, &asize);
+    ER er = tk_swri_dev(dd, 0, (char *)buffer, total_len, &asize);
+    return er;
+}
 
-    return;
+/* CSVペイロード構築：ts/result/メタ情報/FFT配列 */
+static int build_fft_csv(char *dst, size_t cap,
+                         SYSTIM ts, const float *spec, size_t n, int result)
+{
+    if (!dst || !spec || cap < 32) return -1;
+
+    size_t len = 0;
+    const unsigned long long ts_us = systim_to_u64(ts);
+
+    /* ヘッダ部（ts, result, n, bin_hz） */
+    int w = snprintf(dst + len, cap - len,
+                     "ts_us=%llu,result=%d,n=%u,bin_hz=%.6f,fft=",
+                     ts_us, result, (unsigned)n, (double)LGXS_BIN_HZ);
+    if (w < 0) return -2;
+    len += (size_t)w;
+
+    /* スペクトル本体（必要に応じて間引き） */
+    for (size_t i = 0; i < n; i += LGXS_DOWNSAMPLE) {
+        if (len + 16 >= cap) break;  /* 余裕なければ打ち切り */
+        w = snprintf(dst + len, cap - len,
+                     (i + LGXS_DOWNSAMPLE < n) ? LGXS_FLOAT_FMT "," : LGXS_FLOAT_FMT "\n",
+                     (double)spec[i]);
+        if (w < 0) return -3;
+        len += (size_t)w;
+    }
+    return (int)len;
 }
 
 /*==============================*/
@@ -191,7 +234,7 @@ LOCAL void init_task_tnet(void)
 /* TNET メインタスク */
 EXPORT void task_tnet(INT stacd, void *exinf)
 {
-    (void)stacd; (void)exinf;
+    //(void)stacd; (void)exinf;
 
     APP_PRINT("[TNET started]\n");
 
@@ -208,12 +251,31 @@ EXPORT void task_tnet(INT stacd, void *exinf)
         }
 
         if (pum->msgid == MSGID_TNET_REQ) {
-            /* TAPP→TNET：AI判定結果は result に格納されている前提 */
+            /* TAPP→TNET：AI判定結果は user_msg_t.result に格納されている前提 */
             INT ai_result = pum->result;
 
             if (s_eth_dd >= E_OK) {
-                send_udp_packet(s_eth_dd, ai_result);  /* 片方向送信（応答は待たない） */
-                send_net_res(ai_result);               /* 送信したことをTAPPへ応答 */
+                /* 固有ペイロードを取り出す（timestamp + spectrum[]） */
+                msg_net_req_t *req = (msg_net_req_t *)&pum->pyload;
+
+                /* CSV生成（ts/result/メタ情報/FFT） */
+                char csv[1400];
+                int len = build_fft_csv(csv, sizeof(csv),
+                                        req->tim, req->spectrum, IMU_REC_MAX /2,
+                                        (int)ai_result);
+                if (len < 0) {
+                    APP_ERR_PRINT("[TNET] build_fft_csv err:%d\n", len);
+                    send_net_res(E_PAR);
+                } else {
+                    /* UDP送信（片方向・応答なし） */
+                    ER snd = send_udp_packet(s_eth_dd, (const uint8_t *)csv, (uint16_t)len);
+                    if (snd < E_OK) {
+                        APP_ERR_PRINT("[TNET] UDP send error=%d\n", snd);
+                    } else {
+                        APP_PRINT("[TNET] UDP sent %dB (ts+FFT)\n", len);
+                    }
+                    send_net_res((snd < E_OK) ? E_IO : E_OK);
+                }
             } else {
                 APP_ERR_PRINT("[TNET] ether device not opened.\n");
                 send_net_res(E_IO);

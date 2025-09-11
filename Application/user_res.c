@@ -109,12 +109,13 @@ EXPORT ER create_mem_pools(void) {
     ER ercd;
 
     const T_CMPF mpf_table[] = {
-        { .mpfatr = TA_TFIFO, .mpfcnt = MPFNUM_LARGE, .blfsz = MPFSZ_LARGE, .bufptr = NULL }, // MPFID_LARGE (ID=1)
-        { .mpfatr = TA_TFIFO, .mpfcnt = MPFNUM_SMALL, .blfsz = MPFSZ_SMALL, .bufptr = NULL }, // MPFID_SMALL (ID=2)
+        { .mpfatr = TA_TFIFO, .mpfcnt = MPFNUM_LARGE, .blfsz = MPFSZ_LARGE, .bufptr = NULL },   // MPFID_LARGE (ID=1)
+        { .mpfatr = TA_TFIFO, .mpfcnt = MPFNUM_MEDIUM, .blfsz = MPFSZ_MEDIUM, .bufptr = NULL }, // MPFID_MIDDLE (ID=2)
+        { .mpfatr = TA_TFIFO, .mpfcnt = MPFNUM_SMALL, .blfsz = MPFSZ_SMALL, .bufptr = NULL },   // MPFID_SMALL (ID=3)
     };
 
     for (int i = 0; i < DIM(mpf_table); i++) {
-        ercd = tk_cre_mpf(&mpf_table[i]); // MPFID_LARGE (ID=1)
+        ercd = tk_cre_mpf(&mpf_table[i]);
         if (ercd < E_OK) {
             return ercd;
         }

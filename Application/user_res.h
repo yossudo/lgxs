@@ -44,7 +44,7 @@ typedef enum {
 #define STKSZ_TAPP      2048
 #define STKSZ_TAI       4096
 #define STKSZ_TIMU      1024
-#define STKSZ_TNET      1024
+#define STKSZ_TNET      2048
 #define STKSZ_TLED      1024
 
 IMPORT ER create_tasks(void);
@@ -70,12 +70,15 @@ IMPORT ER create_mailboxes(void);
  *------------------------------------------*/
 typedef enum {
     MPFID_LARGE = 1,     // 2080B用（加速度1024点など）
+    MPFID_MEDIUM,        // 1024B用（FFT1512点など）
     MPFID_SMALL          // 32B用（結果や通知など）
     // 追加はここに
 } mpf_id_t;
 
 #define MPFNUM_LARGE  4     // 同時に4通の大きなデータを送れる想定
 #define MPFSZ_LARGE  ((1024 * sizeof(UH)) + 64)
+#define MPFNUM_MEDIUM  2     // 同時に2通の中ぐらいデータを送れる想定
+#define MPFSZ_MEDIUM  ((512 * sizeof(float32_t)) + 64)
 #define MPFNUM_SMALL  16    // 小メッセージは多数送信可能
 #define MPFSZ_SMALL 32
 
@@ -124,7 +127,12 @@ typedef struct {
 
 typedef struct {
     SYSTIM tim;
-    UH accz[IMU_REC_MAX];
+    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
+} msg_ai_res_t;
+
+typedef struct {
+    SYSTIM tim;
+    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
 } msg_net_req_t;
 
 typedef struct {
