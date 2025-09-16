@@ -37,7 +37,7 @@
 #define LGXS_FS_HZ       (100.0f)                 /* サンプリング周波数 */
 #define LGXS_FFT_N       (1024)                   /* FFTポイント */
 #define LGXS_BIN_HZ      (LGXS_FS_HZ / LGXS_FFT_N)
-#define LGXS_DOWNSAMPLE  (1)                      /* 2,4,8… にするとCSV縮小 */
+#define LGXS_DOWNSAMPLE  (4)                      /* 2,4,8… にするとCSV縮小 */
 #define LGXS_FLOAT_FMT   "%.3f"                   /* 小数フォーマット */
 
 /* SYSTIM → U64（μsなど）の変換。環境のマクロに合わせる。 */
@@ -164,11 +164,12 @@ static int build_fft_csv(char *dst, size_t cap,
 
     size_t len = 0;
     const unsigned long long ts_us = systim_to_u64(ts);
+    const unsigned long ts_val = (unsigned long)ts_us;
 
     /* ヘッダ部（ts, result, n, bin_hz） */
     int w = snprintf(dst + len, cap - len,
-                     "ts_us=%llu,result=%d,n=%u,bin_hz=%.6f,fft=",
-                     ts_us, result, (unsigned)n, (double)LGXS_BIN_HZ);
+                     "ts_us=%lu,result=%d,n=%u,bin_hz=%.6f,fft=",
+                     ts_val, result, (unsigned)n, (double)LGXS_BIN_HZ);
     if (w < 0) return -2;
     len += (size_t)w;
 
@@ -259,7 +260,7 @@ EXPORT void task_tnet(INT stacd, void *exinf)
                 msg_net_req_t *req = (msg_net_req_t *)&pum->pyload;
 
                 /* CSV生成（ts/result/メタ情報/FFT） */
-                char csv[1400];
+                static char csv[1400];
                 int len = build_fft_csv(csv, sizeof(csv),
                                         req->tim, req->spectrum, IMU_REC_MAX /2,
                                         (int)ai_result);
