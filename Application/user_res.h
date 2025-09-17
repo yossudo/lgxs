@@ -114,6 +114,9 @@ typedef struct {
 } user_msg_t;
 
 #define IMU_REC_MAX 1024
+#define FEAT_DIM 16
+#define SPEC_DIM 128
+
 
 typedef struct {
     SYSTIM tim;
@@ -122,17 +125,22 @@ typedef struct {
 
 typedef struct {
     SYSTIM tim;
-    UH accz[IMU_REC_MAX];
+    float  feat[FEAT_DIM];         /* 16次元特徴 (TAPP→TAI) */
+    float32_t spectrum[SPEC_DIM];  /* 可視化用128bin (TAPP→TAI) */
 } msg_ai_req_t;
 
 typedef struct {
     SYSTIM tim;
-    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
+    float32_t spectrum[SPEC_DIM];  /* 可視化用128bin (TAI→TAPP→TNET) */
+    int8_t  label;                 /* 0:正常, 1:異常 */
+    float   score;                 /* 異常確率 */
+    float   conf_norm;
+    float   conf_anom;
 } msg_ai_res_t;
 
 typedef struct {
     SYSTIM tim;
-    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
+    float32_t spectrum[SPEC_DIM];  /* 128binスペクトル (TAPP→TNET) */
 } msg_net_req_t;
 
 typedef struct {
