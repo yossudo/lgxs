@@ -41,7 +41,7 @@ typedef enum {
 /*------------------------------------------
  * タスクスタックサイズ定義（単位：Byte）
  *------------------------------------------*/
-#define STKSZ_TAPP      2048
+#define STKSZ_TAPP      4096
 #define STKSZ_TAI       4096
 #define STKSZ_TIMU      1024
 #define STKSZ_TNET      2048
