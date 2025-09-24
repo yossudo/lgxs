@@ -16,6 +16,77 @@
 #include <math.h>
 #include "arm_math.h"
 
+#include <float.h>
+#include <stdint.h>
+
+static inline int is_finite_f32(float x){ return !(isnan(x) || isinf(x)); }
+
+/* 1000倍して整数化（小数3桁）＋16進パターンも一緒に出す */
+static void dbg_array_stats(const char* tag, const float *a, int n)
+{
+    int n_nan=0, n_inf=0; float mn=+FLT_MAX, mx=-FLT_MAX;
+    for (int i=0;i<n;i++){
+        float v=a[i];
+        if(!is_finite_f32(v)){ if(isnan(v)) n_nan++; else n_inf++; continue; }
+        if(v<mn) mn=v; if(v>mx) mx=v;
+    }
+    /* 行1：件数 */
+    APP_PRINT("[MON] %s: n=%d nan=%d inf=%d\n", tag, n, n_nan, n_inf);
+
+    /* 行2：min/max を固定小数点(×1000)と16進で表示 */
+    int32_t qmn = (int32_t)(mn*1000.0f);
+    int32_t qmx = (int32_t)(mx*1000.0f);
+    union { float f; uint32_t u; } umn={mn}, umx={mx};
+    APP_PRINT("[MON] %s: min=%d.%03d max=%d.%03d  (hex: %08x / %08x)\n",
+              tag,
+              (int)(qmn/1000), (int)abs(qmn%1000),
+              (int)(qmx/1000), (int)abs(qmx%1000),
+              (unsigned)umn.u, (unsigned)umx.u);
+}
+
+
+/* NaN/Inf/異常大をクリップ。パワー系は負値を0へ */
+static void sanitize_inplace(float *a, int n, float clamp_abs_max)
+{
+    for (int i = 0; i < n; i++) {
+        float v = a[i];
+        if (!is_finite_f32(v) || fabsf(v) > clamp_abs_max) v = 0.0f;
+        if (v < 0.0f) v = 0.0f;
+        a[i] = v;
+    }
+}
+
+/* 追加：時系列用（非有限/異常大だけ除去。符号は保持） */
+static void sanitize_signal(float *a, int n, float clamp_abs_max)
+{
+    for (int i = 0; i < n; i++) {
+        float v = a[i];
+        if (!is_finite_f32(v) || fabsf(v) > clamp_abs_max) v = 0.0f;
+        a[i] = v;  // 符号は触らない
+    }
+}
+
+/* 既存：パワー/スペクトル用（非有限/異常大→0、負値→0） */
+static void sanitize_power(float *a, int n, float clamp_abs_max)
+{
+    for (int i = 0; i < n; i++) {
+        float v = a[i];
+        if (!is_finite_f32(v) || fabsf(v) > clamp_abs_max) v = 0.0f;
+        if (v < 0.0f) v = 0.0f;
+        a[i] = v;
+    }
+}
+
+/* 追加：IMU生配列の min/max を見る（整数版） */
+static void dbg_i16_stats(const char* tag, const int16_t *a, int n)
+{
+    int16_t mn = INT16_MAX, mx = INT16_MIN;
+    for (int i=0;i<n;i++){ int16_t v=a[i]; if(v<mn) mn=v; if(v>mx) mx=v; }
+    APP_PRINT("[MON] %s: n=%d min=%d max=%d\n", tag, n, (int)mn, (int)mx);
+}
+
+
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
 #endif
@@ -50,7 +121,11 @@ static void tapp_fft_init(void){
 
 /* Welch代替：時間EMAでのスペクトル平滑 */
 #define USE_EMA        1
+#if 1
+#define EMA_BETA       0.90f          /* 大きいほどなめらか */
+#else
 #define EMA_BETA       0.85f          /* 大きいほどなめらか */
+#endif
 
 /* ノイズ床（中央値）窓幅：奇数 */
 #define MED_WIN        7
@@ -75,7 +150,7 @@ static inline float hpf1_step(hpf1_t* f, float x) {
 
 /* ---- LPF(2次Biquad)（任意・係数は後で最適化）---- */
 /* fs=100Hz, fc=35Hz, Q=0.707 の係数例（双一次変換）: 必要時のみ有効化 */
-#define USE_LPF        0
+#define USE_LPF        1
 typedef struct {
     arm_biquad_casd_df1_inst_f32 S;
     float coeffs[5];
@@ -84,8 +159,20 @@ typedef struct {
 
 /* 係数は設計ツールで置き換えてOK。ここでは安全な「素通しに近い」仮係数 */
 static inline void lpf2_init(lpf2_t* f) {
+#if 1
+    /* fs=100 Hz, fc=30 Hz, Q=0.707 (Butterworth) */
+    f->coeffs[0] = 0.305572f;  // b0
+    f->coeffs[1] = 0.611144f;  // b1
+    f->coeffs[2] = 0.305572f;  // b2
+    f->coeffs[3] = -0.369527f; // a1
+    f->coeffs[4] =  0.195816f; // a2
+#else
     /* b0, b1, b2, a1, a2 */
     f->coeffs[0]=1.0f; f->coeffs[1]=0.0f; f->coeffs[2]=0.0f; f->coeffs[3]=0.0f; f->coeffs[4]=0.0f;
+#endif
+    /* ★ state をゼロ初期化（重要） */
+    for (int i = 0; i < 4; i++) f->state[i] = 0.0f;
+
     arm_biquad_cascade_df1_init_f32(&f->S, 1, f->coeffs, f->state);
 }
 static inline void lpf2_process(lpf2_t* f, float* x, uint32_t n) {
@@ -216,6 +303,9 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
     // タスク初期化
     init_task_tapp();
 
+    /* 一度だけでOK（init直後など） */
+    dbg_array_stats("hann", g_hann, FFT_N);  // min ≈ 0.0, max ≈ 1.0 が期待
+
     // グルグル．．．
     ER er;
     user_msg_t *pum = NULL;
@@ -246,6 +336,8 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             static float X[FFT_N];
             static float P512[BIN_OUT];
 
+            dbg_i16_stats("imu.raw(i16)", mir->accz, FFT_N);
+
             for (int i=0;i<FFT_N;i++) {
                 float v = (float)mir->accz[i];
                 v = hpf1_step(&g_hpf, v);            /* HPF */
@@ -259,8 +351,19 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             lpf2_process(&g_lpf, x, FFT_N);          /* 任意 */
         #endif
 
+            /* 入力の NaN を掃除（ここで止めておくと伝染しない） */
+            sanitize_signal(x, FFT_N, 1e20f);
+
+#define FFT_NORM_POW   (1.0f / ((float)FFT_N * (float)FFT_N))  /* 1/N² */
+#define HANN_E_W2      (0.375f)                                /* mean(w^2) */
+#define POW_SCALE      (FFT_NORM_POW / HANN_E_W2)              /* = 1/(N²*0.375) ≈ 1/(0.375*N²) */
+
+
             for (int i=0;i<FFT_N;i++) x[i] *= g_hann[i];
+            dbg_array_stats("x(hann)", x, FFT_N);
+
             arm_rfft_fast_f32(&Sfft, x, X, 0);
+            dbg_array_stats("X(ri)", X, FFT_N);
 
             P512[0] = X[0]*X[0];
             for (int k=1;k<BIN_OUT-1;k++){
@@ -269,12 +372,24 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             }
             P512[BIN_OUT-1] = X[1]*X[1];
 
+            /* 正規化：1/N² と Hannの E[w²]=0.375 を補正 */
+            for (int k=0; k < BIN_OUT; k++) P512[k] *= POW_SCALE;
+
+            /* シングルサイド補正（DC/Nyq以外は×2） */
+            for (int k=1; k < BIN_OUT-1; k++) P512[k] *= 2.0f;
+
+            /* パワー配列のサニタイズ（非有限/負→0）＆監視 */
+            sanitize_power(P512, BIN_OUT, 1e20f);
+            dbg_array_stats("P512(nrm)", P512, BIN_OUT);
+
             /* --- 2) 512→128 統合（パワー加算） --- */
             static float spec128[BIN128];
             for (int j=0;j<BIN128;j++){
                 int k0 = j*4;
                 spec128[j] = P512[k0+0] + P512[k0+1] + P512[k0+2] + P512[k0+3];
             }
+            sanitize_inplace(spec128, BIN128, 1e20f);
+            dbg_array_stats("SPEC128(raw)", spec128, BIN128);  /* ← 監視D */
 
             /* --- 3) 時間方向EMAで平滑化（視覚/判定ともに安定化） --- */
         #if USE_EMA
@@ -288,6 +403,9 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
         #else
             const float* p128 = spec128;
         #endif
+
+            sanitize_inplace(g_psd_ema, BIN128, 1e20f);
+            dbg_array_stats("SPEC128(ema)", g_psd_ema, BIN128);
 
             /* --- 4) ノイズ床（近傍中央値）→SNRベクトル --- */
             static float floor128[BIN128];
