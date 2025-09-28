@@ -124,23 +124,31 @@ typedef struct {
 } msg_imu_ind_t;
 
 typedef struct {
-    SYSTIM tim;
-    float  feat[FEAT_DIM];         /* 16次元特徴 (TAPP→TAI) */
-    float32_t spectrum[SPEC_DIM];  /* 可視化用128bin (TAPP→TAI) */
+    SYSTIM tim;                /* ★ TAPP→TAI：時刻を渡す（既存TAPPで使用中） */
+    float  feat[FEAT_DIM];     /* 16次元特徴 */
+    float  spectrum[SPEC_DIM]; /* 128bin PSD(EMA) */
+    float  bin_hz;             /* 128binの1bin周波数刻み（例：0.390625） */
 } msg_ai_req_t;
 
 typedef struct {
-    SYSTIM tim;
-    float32_t spectrum[SPEC_DIM];  /* 可視化用128bin (TAI→TAPP→TNET) */
-    int8_t  label;                 /* 0:正常, 1:異常 */
-    float   score;                 /* 異常確率 */
-    float   conf_norm;
-    float   conf_anom;
+    int8_t label;              /* 0=safe,1=danger */
+    float  score;              /* 0..1 */
+    float  conf_anom;          /* ＝score */
+    float  conf_norm;          /* 1-score */
+
+    /* ★ 既存コードが参照しているので追加： */
+    SYSTIM tim;                /* TAIがREQから引き継いで返す */
+    float  spectrum[SPEC_DIM]; /* 可視化/UDP送信用にそのまま返す */
+    float  bin_hz;
+    float  feat[FEAT_DIM];
 } msg_ai_res_t;
 
 typedef struct {
     SYSTIM tim;
     float32_t spectrum[SPEC_DIM];  /* 128binスペクトル (TAPP→TNET) */
+    float  score;              // 0..1
+    float  bin_hz;             // 例: 0.390625
+    float  feat[FEAT_DIM];     // 16D特徴
 } msg_net_req_t;
 
 typedef struct {

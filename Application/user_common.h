@@ -26,4 +26,16 @@
     (UW)__now.lo; \
 })
 
+#ifndef FEAT_DIM
+#define FEAT_DIM 16
+#endif
+
+#ifndef SPEC_DIM
+#define SPEC_DIM 128
+#endif
+
+#define MSG_NET_REQ_HAS_SCORE
+#define MSG_NET_REQ_HAS_BIN_HZ
+#define MSG_NET_REQ_HAS_FEAT
+
 #endif

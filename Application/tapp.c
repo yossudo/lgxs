@@ -19,6 +19,65 @@
 #include <float.h>
 #include <stdint.h>
 
+
+/* ★プロジェクトのメモリプールIDに合わせて変更してください。
+   - 既存コードで受信側が tk_rel_mpf(pum->mpfid, pum) しているので、
+     ここでも同じプールで確保し、構造体の mpfid に設定します。 */
+#ifndef MPFID_USER_MSG
+#define MPFID_USER_MSG  MPFID_MEDIUM  /* 例：共通ユーザメッセージ用プール。無ければ適切なIDに置換 */
+#endif
+
+/* user_msg_t の payload サイズを安全に取るためのヘルパ */
+#ifndef USER_PYLOAD_SIZE
+#define USER_PYLOAD_SIZE (sizeof(((user_msg_t*)0)->pyload))
+#endif
+
+ER send_net_req_ex(INT result, const msg_net_req_t *pnet)
+{
+    if (pnet == NULL) return E_PAR;
+
+    ER er;
+    user_msg_t *pm = NULL;
+
+    er = tk_get_mpf(MPFID_USER_MSG, (void**)&pm, TMO_FEVR);
+    if (er != E_OK || pm == NULL) {
+        APP_ERR_PRINT("send_net_req_ex: get_mpf err=%d\n", er);
+        return (er != E_OK) ? er : E_NOMEM;
+    }
+
+    pm->mpfid  = MPFID_USER_MSG;
+    pm->msgid  = MSGID_TNET_REQ;
+    pm->result = result;
+
+    const size_t need = sizeof(msg_net_req_t);
+
+    /* ▼ payload 容量チェック：プロジェクト定義があれば厳密、無ければ警告のみで送る */
+#ifdef USER_MSG_PYLOAD_SIZE
+    const size_t cap = (size_t)USER_MSG_PYLOAD_SIZE;
+    if (need > cap) {
+        APP_ERR_PRINT("send_net_req_ex: payload too large need=%u cap=%u\n",
+                      (unsigned)need, (unsigned)cap);
+        (void)tk_rel_mpf(pm->mpfid, pm);
+        return E_PAR;
+    }
+#else
+    /* 可変長/ダミー配列の sizeof が 1 になる構造に対応：チェックをスキップ */
+    /* 注意: user_msg_t の payload が need を格納できる前提のメモリプール設計であること */
+    APP_PRINT("send_net_req_ex: WARN: no USER_MSG_PYLOAD_SIZE; skipping cap check (need=%u)\n",
+              (unsigned)need);
+#endif
+
+    memcpy(&pm->pyload, pnet, need);
+
+    er = tk_snd_mbx(MBXID_TNET, (T_MSG*)pm);
+    if (er != E_OK) {
+        APP_ERR_PRINT("send_net_req_ex: snd_mbx err=%d\n", er);
+        (void)tk_rel_mpf(pm->mpfid, pm);
+        return er;
+    }
+    return E_OK;
+}
+
 static inline int is_finite_f32(float x){ return !(isnan(x) || isinf(x)); }
 
 /* 1000倍して整数化（小数3桁）＋16進パターンも一緒に出す */
@@ -28,7 +87,8 @@ static void dbg_array_stats(const char* tag, const float *a, int n)
     for (int i=0;i<n;i++){
         float v=a[i];
         if(!is_finite_f32(v)){ if(isnan(v)) n_nan++; else n_inf++; continue; }
-        if(v<mn) mn=v; if(v>mx) mx=v;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
     }
     /* 行1：件数 */
     APP_PRINT("[MON] %s: n=%d nan=%d inf=%d\n", tag, n, n_nan, n_inf);
@@ -245,6 +305,75 @@ static peak_t pick_peak_snr(const float* power, const float* floor, int n){
     return pk;
 }
 
+/* 16D 特徴抽出：fs=100Hz / BIN128=128 前提（bin幅 = 50/128） */
+#ifndef BIN128
+#define BIN128 SPEC_DIM
+#endif
+
+static inline float bin_hz_128(float fs_hz){ return (fs_hz * 0.5f) / (float)BIN128; }
+static inline int hz_to_bin(float hz, float fs_hz){
+    int k = (int)lrintf(hz / bin_hz_128(fs_hz));
+    if (k < 0) k = 0;
+    if (k >= BIN128) k = BIN128 - 1;
+    return k;
+}
+static float band_mean(const float *psd, int k0, int k1){
+    if (k1 <= k0) return 0.0f;
+    double s = 0.0;
+    for (int k = k0; k < k1; k++) s += psd[k];
+    return (float)(s / (double)(k1 - k0));
+}
+static float median_except_peak(const float *psd, int n, int peak){
+    static float buf[SPEC_DIM];
+    for (int i=0;i<n;i++) buf[i] = (i==peak? 0.0f : psd[i]);
+    for (int i=0;i<n-1;i++) for (int j=i+1;j<n;j++) if (buf[j] < buf[i]) { float t=buf[i]; buf[i]=buf[j]; buf[j]=t; }
+    return buf[n/2];
+}
+static float rolloff_hz(const float *psd, float fs_hz, float pct){
+    double sum=0.0; for(int k=0;k<BIN128;k++) sum += psd[k];
+    double thr=sum*(double)pct, acc=0.0; int k=0;
+    for (;k<BIN128;k++){ acc+=psd[k]; if (acc>=thr) break; }
+    if (k >= BIN128) k = BIN128 - 1;
+    return (float)k * bin_hz_128(fs_hz);
+}
+
+/* 前フレ保持（変化量用） */
+static float g_psd_prev[SPEC_DIM];
+static int   g_psd_prev_valid = 0;
+
+static void extract_feat16(const float *psd128, float fs_hz, float *feat16_out){
+    /* 0-7: バンドログ平均 */
+    const float edges_hz[9]={1,3,6,9,12,18,24,32,50};
+    for(int b=0;b<8;b++){
+        int k0=hz_to_bin(edges_hz[b],fs_hz), k1=hz_to_bin(edges_hz[b+1],fs_hz);
+        float m = band_mean(psd128,k0,k1);
+        feat16_out[b] = log10f(m + 1e-12f);
+    }
+    /* グローバル形状 */
+    int kmax=0; float vmax=psd128[0];
+    for(int k=1;k<BIN128;k++){ if (psd128[k]>vmax){ vmax=psd128[k]; kmax=k; } }
+    float peak_hz = kmax * bin_hz_128(fs_hz);
+    double num=0.0,den=0.0; for(int k=0;k<BIN128;k++){ double f=k*bin_hz_128(fs_hz); double p=psd128[k]; num+=f*p; den+=p; }
+    float centroid = den>0.0? (float)(num/den) : 0.0f;
+    double slog=0.0,s=0.0; for(int k=0;k<BIN128;k++){ float p=psd128[k]+1e-18f; slog+=log(p); s+=p; }
+    float flat = (s>0.0)? (float)exp(slog/BIN128) / (float)(s/BIN128) : 0.0f;
+    float roll95 = rolloff_hz(psd128, fs_hz, 0.95f);
+    float meanp = (float)(s / BIN128);
+    float crest = (meanp>0.0f)? vmax/meanp : 0.0f;
+    float neigh=0.0f; for(int dk=-1;dk<=1;dk++){ int kk=kmax+dk; if(kk>=0&&kk<BIN128) neigh+=psd128[kk]; }
+    float med = median_except_peak(psd128,BIN128,kmax);
+    float snr = (med>1e-12f)? (neigh/med) : 0.0f;
+    float delta=0.0f; if(g_psd_prev_valid){ double sa=0.0; for(int k=0;k<BIN128;k++){ float d=fabsf(psd128[k]-g_psd_prev[k]); sa+=d; } delta=(float)(sa/BIN128); }
+    for (int k = 0; k < BIN128; k++) g_psd_prev[k] = psd128[k];
+    g_psd_prev_valid = 1;
+    feat16_out[8]=peak_hz; feat16_out[9]=vmax; feat16_out[10]=centroid; feat16_out[11]=flat;
+    feat16_out[12]=roll95; feat16_out[13]=crest; feat16_out[14]=snr; feat16_out[15]=delta;
+    for(int i=0;i<FEAT_DIM;i++){ float v=feat16_out[i]; if(!(v==v) || isinf(v) || v<-1e30f || v>1e30f) feat16_out[i]=0.0f; }
+}
+
+
+
+
 
 // 関数プロトタイプ
 LOCAL void init_task_tapp(void);
@@ -273,7 +402,7 @@ LOCAL void init_task_tapp(void)
     // 周辺タスクが上がるまでちょっと待つ
     tk_dly_tsk(100);
 
-    send_led_req(TRUE, TLED_GREEN, TLED_PAT_ON, 0);
+    send_led_req(TRUE, TLED_BLUE, TLED_PAT_ON, 0);
 
     tapp_fft_init();
 
@@ -320,23 +449,80 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
 
         if (pum->msgid == MSGID_TIMU_IND) {
 
-
             mir = (msg_imu_ind_t *)&pum->pyload;
 
             APP_PRINT( "rcv_mbx TAPP:[%d]\n", pum->result );
 
-            APP_PRINT("%llu - ", SYSTIM_TO_UD(mir->tim));
-            for (int i =0; i < 16; i++) {
-                APP_PRINT("%d ", mir->accz[i]);
-            }
-            APP_PRINT("\n");
+#if 1
+            /* --- 1) DC除去（平均値引き）→ Hann窓 → RFFT → power512 --- */
+            static float x[FFT_N];
+            static float X[FFT_N];
+            static float P512[BIN_OUT];
 
+            dbg_i16_stats("imu.raw(i16)", (const int16_t*)mir->accz, FFT_N);
+
+            /* 1-1) 平均値（DC）を求めて引く */
+            double mean = 0.0;
+            for (int i=0;i<FFT_N;i++) {
+                mean += (double)((int32_t)((const int16_t*)mir->accz)[i]);
+            }
+            mean /= (double)FFT_N;
+
+            /* 1-2) x[i] = (accz[i] - mean) * scale */
+            const float scale = 1.0f; /* 必要ならゲイン調整 */
+            for (int i=0;i<FFT_N;i++) {
+                float v = ((float)((int32_t)((const int16_t*)mir->accz)[i]) - (float)mean) * scale;
+                x[i] = v;
+            }
+
+            /* 入力の NaN/Inf を掃除（安全側） */
+            sanitize_signal(x, FFT_N, 1e20f);
+
+            /* 1-3) Hann窓 */
+            for (int i=0;i<FFT_N;i++) x[i] *= g_hann[i];
+            dbg_array_stats("x(hann)", x, FFT_N);
+
+            /* 1-4) RFFT */
+            arm_rfft_fast_f32(&Sfft, x, X, 0);
+            dbg_array_stats("X(ri)", X, FFT_N);
+
+            /* 1-5) パワースペクトル（複素→実） */
+            P512[0] = X[0]*X[0];
+            for (int k=1;k<BIN_OUT-1;k++){
+                float re = X[2*k], im = X[2*k+1];
+                P512[k] = re*re + im*im;
+            }
+            P512[BIN_OUT-1] = X[1]*X[1];
+
+            /* 1-6) 正規化：1/N² と Hann の E[w²]=0.375 を補正 */
+            #define FFT_NORM_POW   (1.0f / ((float)FFT_N * (float)FFT_N))  /* 1/N² */
+            #define HANN_E_W2      (0.375f)                                /* mean(w^2) */
+            #define POW_SCALE      (FFT_NORM_POW / HANN_E_W2)
+            for (int k=0; k < BIN_OUT; k++) P512[k] *= POW_SCALE;
+
+            /* 1-7) 片側スペクトル補正（DC/Nyq 以外 ×2） */
+            for (int k=1; k < BIN_OUT-1; k++) P512[k] *= 2.0f;
+
+            /* 1-8) サニタイズ＆監視 */
+            sanitize_power(P512, BIN_OUT, 1e20f);
+            dbg_array_stats("P512(nrm)", P512, BIN_OUT);
+
+            /* --- 2) 512→128 統合（パワー加算） --- */
+            static float spec128[BIN128];
+            for (int j=0;j<BIN128;j++){
+                int k0 = j*4;
+                spec128[j] = P512[k0+0] + P512[k0+1] + P512[k0+2] + P512[k0+3];
+            }
+            sanitize_inplace(spec128, BIN128, 1e20f);
+            dbg_array_stats("SPEC128(raw)", spec128, BIN128);
+
+#else
             /* --- 1) HPF（必要ならLPF） → Hann窓 → RFFT → power512 --- */
             static float x[FFT_N];
             static float X[FFT_N];
             static float P512[BIN_OUT];
 
-            dbg_i16_stats("imu.raw(i16)", mir->accz, FFT_N);
+            dbg_i16_stats("imu.raw(i16)", (const int16_t*)mir->accz, FFT_N);
 
             for (int i=0;i<FFT_N;i++) {
                 float v = (float)mir->accz[i];
@@ -390,7 +576,7 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             }
             sanitize_inplace(spec128, BIN128, 1e20f);
             dbg_array_stats("SPEC128(raw)", spec128, BIN128);  /* ← 監視D */
-
+#endif
             /* --- 3) 時間方向EMAで平滑化（視覚/判定ともに安定化） --- */
         #if USE_EMA
             if (!g_ema_init){
@@ -468,26 +654,59 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
 
             /* --- 6) TAIへ送るペイロード作成 --- */
             msg_ai_req_t ai;
+            memset(&ai, 0, sizeof(ai));
+
+            /* タイムスタンプはそのまま継承（構造体に tim がある前提） */
             ai.tim = mir->tim;
-            /* 可視化には平滑済みスペクトル p128 を使用 */
-            for (int j=0;j<BIN128;j++) ai.spectrum[j] = p128[j];
-            for (int f=0; f<FEAT_DIM; f++) ai.feat[f] = feat[f];
 
+            /* 可視化/学習には平滑済みスペクトル p128 を使用（128bin） */
+            for (int j = 0; j < BIN128; j++) {
+                ai.spectrum[j] = p128[j];
+            }
 
+            /* 16次元特徴量を詰める（直前で作った feat[] をそのまま） */
+            for (int f = 0; f < FEAT_DIM; f++) {
+                ai.feat[f] = feat[f];
+            }
 
-            //send_ai_req(TRUE, (msg_ai_req_t *)mir);
+            /* 128bin の 1bin 周波数刻み（fs=100Hz → Nyquist=50Hz → 50/128） */
+            ai.bin_hz = (100.0f * 0.5f) / (float)BIN128;    /* = 0.390625 Hz/bin */
+
             send_ai_req(TRUE, &ai);
-            send_led_req(TRUE, TLED_BLUE, TLED_PAT_BLINK_FAST, 3);
 
         }
         else if (pum->msgid == MSGID_TAI_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
             msg_ai_res_t *pmar = (msg_ai_res_t *)&pum->pyload;
-            send_net_req(pum->result, pmar->tim, pmar->spectrum, IMU_REC_MAX /2);
+
+            msg_net_req_t net = {0};
+            net.tim = pmar->tim;
+            /* スペクトルは TAI が返したもの（128bin） */
+            for (int j=0;j<SPEC_DIM;j++) net.spectrum[j] = pmar->spectrum[j];
+            /* 追加：score/bin_hz/feat を転送（TAI→TAPP→TNET） */
+            net.score = pmar->score;        // TAIで設定済み
+            net.bin_hz = pmar->bin_hz;      // ★下の (c) 参照
+            for (int f=0; f<FEAT_DIM; f++) net.feat[f] = pmar->feat[f];  // ★(c) 参照
+
+            /* 送信関数が (result, tim, spectrum, n) のままなら、net を payload に載せる形へ
+               もしくは send_net_req() の引数を net* に変更するだけでもOK（最小でも payload に net を詰める） */
+            send_net_req_ex(pum->result, &net);   // ← 新しい送信APIにするのが簡単
+
+            // 推論結果をLED表示(緑:安全、赤:危険)
+            send_led_req(TRUE, TLED_GREEN, TLED_PAT_OFF, 0);
+            send_led_req(TRUE, TLED_RED, TLED_PAT_OFF, 0);
+            if (pum->result == 0) {
+                send_led_req(TRUE, TLED_GREEN, TLED_PAT_ON, 0);
+            }
+            else {
+                send_led_req(TRUE, TLED_RED, TLED_PAT_ON, 0);
+            }
+
+
+            //send_net_req(pum->result, pmar->tim, pmar->spectrum, SPEC_DIM);
         }
         else if (pum->msgid == MSGID_TNET_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
-            send_led_req(TRUE, TLED_RED, TLED_PAT_BLINK_SLOW, 1);
         }
         else if (pum->msgid == MSGID_TLED_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
