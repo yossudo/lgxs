@@ -1,3 +1,13 @@
+/**
+ * イーサネットデバイスドライバ
+ *
+ * EK-RA8D1内蔵イーサネットのデバイスドライバ
+ *
+ * @file
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
+ */
 #ifndef _DEV_HAL_ETH_H_
 #define _DEV_HAL_ETH_H_
 

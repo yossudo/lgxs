@@ -28,10 +28,10 @@
 /* 送信先/送信元のMAC/IP/PORTは必要に応じて調整してください */
 #define SRC_MAC  {0x74, 0x90, 0x50, 0xB0, 0xDD, 0x2A}
 //#define DST_MAC  {0x00, 0xE0, 0x4C, 0x68, 0x03, 0x24}  /* 例：udpホスト(blitz) */
-#define DST_MAC  {0xb8, 0x27, 0xeb, 0xe0, 0xf0, 0xa6}  /* 例：udpホスト(blitz) */
+#define DST_MAC  {0xb8, 0x27, 0xeb, 0xe0, 0xf0, 0xa6}    /* 例：udpホスト(RaspberryPi3) */
 #define SRC_IP   {192, 168, 137, 5}
 //#define DST_IP   {192, 168, 137, 1}                    /* 例：udpホスト(blitz) */
-#define DST_IP   {192, 168, 137, 10}                    /* 例：udpホスト(raspberrypi) */
+#define DST_IP   {192, 168, 137, 10}                     /* 例：udpホスト(RaspberryPi3) */
 #define SRC_PORT 12345
 #define DST_PORT 12345
 
@@ -158,8 +158,7 @@ static ER send_udp_packet(ID dd, const uint8_t *payload, uint16_t payload_len)
     return er;
 }
 
-/* 拡張版：score / feat[] / bin_hz を含めてCSV化する */
-/* 例: ts_us=...,result=1,score=0.73,n=128,bin_hz=0.390625,fft=...,feat=... */
+
 static int build_fft_csv_ex(char *dst, size_t cap,
                             SYSTIM ts,
                             const float *spec, size_t n,
@@ -215,7 +214,7 @@ static int build_fft_csv_ex(char *dst, size_t cap,
     return (int)len;
 }
 
-/* 互換ラッパ：既存の呼び出し（score/feat無し）も壊さない */
+
 static int build_fft_csv(char *dst, size_t cap,
                          SYSTIM ts, const float *spec, size_t n, int result)
 {
@@ -225,6 +224,7 @@ static int build_fft_csv(char *dst, size_t cap,
                             /* feat  */ NULL, 0,
                             /* bin_hz*/ (float)LGXS_BIN_HZ);
 }
+
 
 static int build_feat_csv(char *dst, size_t cap,
                           SYSTIM ts, int result,
@@ -304,6 +304,7 @@ LOCAL void init_task_tnet(void)
     }
 }
 
+
 /* TNET メインタスク */
 EXPORT void task_tnet(INT stacd, void *exinf)
 {
@@ -352,26 +353,15 @@ EXPORT void task_tnet(INT stacd, void *exinf)
                 }
 
                 {
-                    /* TAPP→TAI→TNETの受け渡し仕様：
-                       req->spectrum は既にある前提
-                       req に feat/bin_hz/score が「無い」場合も想定し、既定値で送る */
-
                     float score  = -1.0f;
                     float bin_hz = (float)LGXS_BIN_HZ;
                     const float *feat_ptr = NULL;
                     size_t feat_dim = 0;
 
-                    /* もし msg_net_req_t に拡張があれば、次のマクロを有効化して拾う */
-                #ifdef MSG_NET_REQ_HAS_SCORE
                     score = req->score;
-                #endif
-                #ifdef MSG_NET_REQ_HAS_BIN_HZ
                     bin_hz = req->bin_hz;
-                #endif
-                #ifdef MSG_NET_REQ_HAS_FEAT
                     feat_ptr = req->feat;
                     feat_dim = FEAT_DIM;
-                #endif
 
                     static char feat_csv[700];
                     int len2 = build_feat_csv(feat_csv, sizeof(feat_csv),
@@ -382,7 +372,6 @@ EXPORT void task_tnet(INT stacd, void *exinf)
                         send_udp_packet(s_eth_dd, (const uint8_t*)feat_csv, (uint16_t)len2);
                     }
                 }
-
 
             }
             else {

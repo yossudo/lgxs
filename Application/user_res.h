@@ -30,11 +30,13 @@ typedef enum {
  * タスク優先度（低いほど高優先度）
  *------------------------------------------*/
 typedef enum {
-    TPRI_TIMU  = 5,         // IMUデータ取得（正確に100Hzサンプリングさせたいため最高優先度で動作）
-    TPRI_TLED  = 8,         // LED制御
+    TPRI_TIMU  = 5,          // IMUデータ取得（正確に100Hzサンプリングさせたいため最高優先度で動作）
+    TPRI_TLED  = 8,          // LED制御
     TPRI_TNET  = 10,         // ネットワーク通信（UDP通知を即時処理）
-    TPRI_TAI   = 12,        // AI推論（FFT・AI推論を含む重処理）
-    TPRI_TAPP  = 20         // アプリケーション制御（全体統括）
+    TPRI_TAI   = 12,         // AI推論（FFT・AI推論を含む重処理）
+    TPRI_TAPP  = 20,         // アプリケーション制御（全体統括）
+    // 追加はここに
+    TPRI_NUM                 // タスク数（末尾）
 } task_pri_t;
 
 

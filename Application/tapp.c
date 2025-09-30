@@ -20,9 +20,6 @@
 #include <stdint.h>
 
 
-/* ★プロジェクトのメモリプールIDに合わせて変更してください。
-   - 既存コードで受信側が tk_rel_mpf(pum->mpfid, pum) しているので、
-     ここでも同じプールで確保し、構造体の mpfid に設定します。 */
 #ifndef MPFID_USER_MSG
 #define MPFID_USER_MSG  MPFID_MEDIUM  /* 例：共通ユーザメッセージ用プール。無ければ適切なIDに置換 */
 #endif
@@ -31,6 +28,7 @@
 #ifndef USER_PYLOAD_SIZE
 #define USER_PYLOAD_SIZE (sizeof(((user_msg_t*)0)->pyload))
 #endif
+
 
 ER send_net_req_ex(INT result, const msg_net_req_t *pnet)
 {
@@ -78,7 +76,9 @@ ER send_net_req_ex(INT result, const msg_net_req_t *pnet)
     return E_OK;
 }
 
+
 static inline int is_finite_f32(float x){ return !(isnan(x) || isinf(x)); }
+
 
 /* 1000倍して整数化（小数3桁）＋16進パターンも一緒に出す */
 static void dbg_array_stats(const char* tag, const float *a, int n)
@@ -116,7 +116,8 @@ static void sanitize_inplace(float *a, int n, float clamp_abs_max)
     }
 }
 
-/* 追加：時系列用（非有限/異常大だけ除去。符号は保持） */
+
+/* 時系列用（非有限/異常大だけ除去。符号は保持） */
 static void sanitize_signal(float *a, int n, float clamp_abs_max)
 {
     for (int i = 0; i < n; i++) {
@@ -126,7 +127,8 @@ static void sanitize_signal(float *a, int n, float clamp_abs_max)
     }
 }
 
-/* 既存：パワー/スペクトル用（非有限/異常大→0、負値→0） */
+
+/* パワー/スペクトル用（非有限/異常大→0、負値→0） */
 static void sanitize_power(float *a, int n, float clamp_abs_max)
 {
     for (int i = 0; i < n; i++) {
@@ -137,14 +139,14 @@ static void sanitize_power(float *a, int n, float clamp_abs_max)
     }
 }
 
-/* 追加：IMU生配列の min/max を見る（整数版） */
+
+/* IMU生配列の min/max を見る（整数版） */
 static void dbg_i16_stats(const char* tag, const int16_t *a, int n)
 {
     int16_t mn = INT16_MAX, mx = INT16_MIN;
     for (int i=0;i<n;i++){ int16_t v=a[i]; if(v<mn) mn=v; if(v>mx) mx=v; }
     APP_PRINT("[MON] %s: n=%d min=%d max=%d\n", tag, n, (int)mn, (int)mx);
 }
-
 
 
 #ifndef M_PI
@@ -170,10 +172,13 @@ static void tapp_make_hann(void){
         g_hann[i] = 0.5f*(1.0f - arm_cos_f32(2.0f*(float)M_PI*i/(FFT_N-1)));
     }
 }
+
+
 static void tapp_fft_init(void){
     tapp_make_hann();
     arm_rfft_fast_init_f32(&Sfft, FFT_N);
 }
+
 
 /* HPF(1次) パラメータ（fcは適宜調整可） */
 #define HPF_FC_HZ      0.5f
@@ -197,16 +202,14 @@ typedef struct {
     float x1;
 } hpf1_t;
 
-static inline void hpf1_init(hpf1_t* f) {
+
+static inline void hpf1_init(hpf1_t* f)
+{
     f->a = HPF_A;
     f->y1 = 0.0f;
     f->x1 = 0.0f;
 }
-static inline float hpf1_step(hpf1_t* f, float x) {
-    float y = f->a * (f->y1 + x - f->x1);
-    f->y1 = y; f->x1 = x;
-    return y;
-}
+
 
 /* ---- LPF(2次Biquad)（任意・係数は後で最適化）---- */
 /* fs=100Hz, fc=35Hz, Q=0.707 の係数例（双一次変換）: 必要時のみ有効化 */
@@ -217,27 +220,27 @@ typedef struct {
     float state[4];
 } lpf2_t;
 
+
 /* 係数は設計ツールで置き換えてOK。ここでは安全な「素通しに近い」仮係数 */
 static inline void lpf2_init(lpf2_t* f) {
-#if 1
+
     /* fs=100 Hz, fc=30 Hz, Q=0.707 (Butterworth) */
     f->coeffs[0] = 0.305572f;  // b0
     f->coeffs[1] = 0.611144f;  // b1
     f->coeffs[2] = 0.305572f;  // b2
     f->coeffs[3] = -0.369527f; // a1
     f->coeffs[4] =  0.195816f; // a2
-#else
-    /* b0, b1, b2, a1, a2 */
-    f->coeffs[0]=1.0f; f->coeffs[1]=0.0f; f->coeffs[2]=0.0f; f->coeffs[3]=0.0f; f->coeffs[4]=0.0f;
-#endif
     /* ★ state をゼロ初期化（重要） */
     for (int i = 0; i < 4; i++) f->state[i] = 0.0f;
 
     arm_biquad_cascade_df1_init_f32(&f->S, 1, f->coeffs, f->state);
 }
+
+
 static inline void lpf2_process(lpf2_t* f, float* x, uint32_t n) {
     arm_biquad_cascade_df1_f32(&f->S, x, x, n);
 }
+
 
 /* ---- 近傍中央値によるローカルノイズ床 ---- */
 static void local_median_floor(const float* p, float* floor, int n, int w){
@@ -254,23 +257,30 @@ static void local_median_floor(const float* p, float* floor, int n, int w){
     }
 }
 
+
 /* ---- スペクトル重心などの補助 ---- */
 static float spectral_centroid_hz(const float* p, int n){
     float num=0.0f, den=0.0f;
     for(int i=0;i<n;i++){ float f=i*BIN_HZ; num+=f*p[i]; den+=p[i]; }
     return (den>1e-12f)? (num/den) : 0.0f;
 }
+
+
 static float spectral_spread_hz(const float* p, int n, float centroid){
     float num=0.0f, den=0.0f;
     for(int i=0;i<n;i++){ float f=i*BIN_HZ; float d=f-centroid; num+=d*d*p[i]; den+=p[i]; }
     return (den>1e-12f)? sqrtf(num/den) : 0.0f;
 }
+
+
 static float spectral_rolloff_hz(const float* p, int n, float ratio){ /* ratio=0.85等 */
     float total=0.0f; for(int i=0;i<n;i++) total+=p[i];
     float th=total*ratio, acc=0.0f;
     for(int i=0;i<n;i++){ acc+=p[i]; if(acc>=th) return i*BIN_HZ; }
     return (n-1)*BIN_HZ;
 }
+
+
 static float spectral_flatness(const float* p, int n){ /* 幾何平均/算術平均 */
     float sum=0.0f, logsum=0.0f;
     for(int i=0;i<n;i++){ float x=fmaxf(p[i], 1e-18f); sum+=x; logsum+=logf(x); }
@@ -279,6 +289,7 @@ static float spectral_flatness(const float* p, int n){ /* 幾何平均/算術平
     return (am>1e-18f)? (gm/am) : 0.0f;
 }
 
+
 /* ---- ピーク（最大SNR）抽出 ---- */
 typedef struct {
     int   idx;
@@ -286,6 +297,7 @@ typedef struct {
     float snr_db;
     float width_hz;
 } peak_t;
+
 
 static peak_t pick_peak_snr(const float* power, const float* floor, int n){
     int imax=1; float best=0.0f;
@@ -305,6 +317,7 @@ static peak_t pick_peak_snr(const float* power, const float* floor, int n){
     return pk;
 }
 
+
 /* 16D 特徴抽出：fs=100Hz / BIN128=128 前提（bin幅 = 50/128） */
 #ifndef BIN128
 #define BIN128 SPEC_DIM
@@ -317,69 +330,12 @@ static inline int hz_to_bin(float hz, float fs_hz){
     if (k >= BIN128) k = BIN128 - 1;
     return k;
 }
-static float band_mean(const float *psd, int k0, int k1){
-    if (k1 <= k0) return 0.0f;
-    double s = 0.0;
-    for (int k = k0; k < k1; k++) s += psd[k];
-    return (float)(s / (double)(k1 - k0));
-}
-static float median_except_peak(const float *psd, int n, int peak){
-    static float buf[SPEC_DIM];
-    for (int i=0;i<n;i++) buf[i] = (i==peak? 0.0f : psd[i]);
-    for (int i=0;i<n-1;i++) for (int j=i+1;j<n;j++) if (buf[j] < buf[i]) { float t=buf[i]; buf[i]=buf[j]; buf[j]=t; }
-    return buf[n/2];
-}
-static float rolloff_hz(const float *psd, float fs_hz, float pct){
-    double sum=0.0; for(int k=0;k<BIN128;k++) sum += psd[k];
-    double thr=sum*(double)pct, acc=0.0; int k=0;
-    for (;k<BIN128;k++){ acc+=psd[k]; if (acc>=thr) break; }
-    if (k >= BIN128) k = BIN128 - 1;
-    return (float)k * bin_hz_128(fs_hz);
-}
-
-/* 前フレ保持（変化量用） */
-static float g_psd_prev[SPEC_DIM];
-static int   g_psd_prev_valid = 0;
-
-static void extract_feat16(const float *psd128, float fs_hz, float *feat16_out){
-    /* 0-7: バンドログ平均 */
-    const float edges_hz[9]={1,3,6,9,12,18,24,32,50};
-    for(int b=0;b<8;b++){
-        int k0=hz_to_bin(edges_hz[b],fs_hz), k1=hz_to_bin(edges_hz[b+1],fs_hz);
-        float m = band_mean(psd128,k0,k1);
-        feat16_out[b] = log10f(m + 1e-12f);
-    }
-    /* グローバル形状 */
-    int kmax=0; float vmax=psd128[0];
-    for(int k=1;k<BIN128;k++){ if (psd128[k]>vmax){ vmax=psd128[k]; kmax=k; } }
-    float peak_hz = kmax * bin_hz_128(fs_hz);
-    double num=0.0,den=0.0; for(int k=0;k<BIN128;k++){ double f=k*bin_hz_128(fs_hz); double p=psd128[k]; num+=f*p; den+=p; }
-    float centroid = den>0.0? (float)(num/den) : 0.0f;
-    double slog=0.0,s=0.0; for(int k=0;k<BIN128;k++){ float p=psd128[k]+1e-18f; slog+=log(p); s+=p; }
-    float flat = (s>0.0)? (float)exp(slog/BIN128) / (float)(s/BIN128) : 0.0f;
-    float roll95 = rolloff_hz(psd128, fs_hz, 0.95f);
-    float meanp = (float)(s / BIN128);
-    float crest = (meanp>0.0f)? vmax/meanp : 0.0f;
-    float neigh=0.0f; for(int dk=-1;dk<=1;dk++){ int kk=kmax+dk; if(kk>=0&&kk<BIN128) neigh+=psd128[kk]; }
-    float med = median_except_peak(psd128,BIN128,kmax);
-    float snr = (med>1e-12f)? (neigh/med) : 0.0f;
-    float delta=0.0f; if(g_psd_prev_valid){ double sa=0.0; for(int k=0;k<BIN128;k++){ float d=fabsf(psd128[k]-g_psd_prev[k]); sa+=d; } delta=(float)(sa/BIN128); }
-    for (int k = 0; k < BIN128; k++) g_psd_prev[k] = psd128[k];
-    g_psd_prev_valid = 1;
-    feat16_out[8]=peak_hz; feat16_out[9]=vmax; feat16_out[10]=centroid; feat16_out[11]=flat;
-    feat16_out[12]=roll95; feat16_out[13]=crest; feat16_out[14]=snr; feat16_out[15]=delta;
-    for(int i=0;i<FEAT_DIM;i++){ float v=feat16_out[i]; if(!(v==v) || isinf(v) || v<-1e30f || v>1e30f) feat16_out[i]=0.0f; }
-}
-
-
-
 
 
 // 関数プロトタイプ
 LOCAL void init_task_tapp(void);
 EXPORT void task_tapp(INT stacd, void *exinf);
 LOCAL ER send_ai_req(INT result, msg_ai_req_t *data);
-LOCAL ER send_net_req(INT result, SYSTIM tim, const float *spectrum, size_t spectrum_len);
 LOCAL ER send_led_req(INT result, UB led, UB pattern, W blink_count);
 
 static hpf1_t   g_hpf;
@@ -388,6 +344,7 @@ static lpf2_t   g_lpf;
 #endif
 static float    g_psd_ema[BIN128];
 static int      g_ema_init = 0;
+
 
 /**
  * タスク初期化
@@ -440,6 +397,7 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
     user_msg_t *pum = NULL;
     msg_imu_ind_t *mir = NULL;
     while( 1 ) {
+
         // メッセージ受信待ち
         er = tk_rcv_mbx( MBXID_TAPP, (T_MSG **)&pum, TMO_FEVR );
         if (er != E_OK && er != E_TMOUT) {
@@ -447,13 +405,13 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             continue;
         }
 
+        // MSGID_TIMU_IND受信ならば、、、
         if (pum->msgid == MSGID_TIMU_IND) {
 
             mir = (msg_imu_ind_t *)&pum->pyload;
 
             APP_PRINT( "rcv_mbx TAPP:[%d]\n", pum->result );
 
-#if 1
             /* --- 1) DC除去（平均値引き）→ Hann窓 → RFFT → power512 --- */
             static float x[FFT_N];
             static float X[FFT_N];
@@ -516,69 +474,8 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             sanitize_inplace(spec128, BIN128, 1e20f);
             dbg_array_stats("SPEC128(raw)", spec128, BIN128);
 
-#else
-            /* --- 1) HPF（必要ならLPF） → Hann窓 → RFFT → power512 --- */
-            static float x[FFT_N];
-            static float X[FFT_N];
-            static float P512[BIN_OUT];
-
-            dbg_i16_stats("imu.raw(i16)", (const int16_t*)mir->accz, FFT_N);
-
-            for (int i=0;i<FFT_N;i++) {
-                float v = (float)mir->accz[i];
-                v = hpf1_step(&g_hpf, v);            /* HPF */
-        #if USE_LPF
-                x[i] = v;                            /* LPFは配列でまとめて処理 */
-        #else
-                x[i] = v;
-        #endif
-            }
-        #if USE_LPF
-            lpf2_process(&g_lpf, x, FFT_N);          /* 任意 */
-        #endif
-
-            /* 入力の NaN を掃除（ここで止めておくと伝染しない） */
-            sanitize_signal(x, FFT_N, 1e20f);
-
-#define FFT_NORM_POW   (1.0f / ((float)FFT_N * (float)FFT_N))  /* 1/N² */
-#define HANN_E_W2      (0.375f)                                /* mean(w^2) */
-#define POW_SCALE      (FFT_NORM_POW / HANN_E_W2)              /* = 1/(N²*0.375) ≈ 1/(0.375*N²) */
-
-
-            for (int i=0;i<FFT_N;i++) x[i] *= g_hann[i];
-            dbg_array_stats("x(hann)", x, FFT_N);
-
-            arm_rfft_fast_f32(&Sfft, x, X, 0);
-            dbg_array_stats("X(ri)", X, FFT_N);
-
-            P512[0] = X[0]*X[0];
-            for (int k=1;k<BIN_OUT-1;k++){
-                float re = X[2*k], im = X[2*k+1];
-                P512[k] = re*re + im*im;
-            }
-            P512[BIN_OUT-1] = X[1]*X[1];
-
-            /* 正規化：1/N² と Hannの E[w²]=0.375 を補正 */
-            for (int k=0; k < BIN_OUT; k++) P512[k] *= POW_SCALE;
-
-            /* シングルサイド補正（DC/Nyq以外は×2） */
-            for (int k=1; k < BIN_OUT-1; k++) P512[k] *= 2.0f;
-
-            /* パワー配列のサニタイズ（非有限/負→0）＆監視 */
-            sanitize_power(P512, BIN_OUT, 1e20f);
-            dbg_array_stats("P512(nrm)", P512, BIN_OUT);
-
-            /* --- 2) 512→128 統合（パワー加算） --- */
-            static float spec128[BIN128];
-            for (int j=0;j<BIN128;j++){
-                int k0 = j*4;
-                spec128[j] = P512[k0+0] + P512[k0+1] + P512[k0+2] + P512[k0+3];
-            }
-            sanitize_inplace(spec128, BIN128, 1e20f);
-            dbg_array_stats("SPEC128(raw)", spec128, BIN128);  /* ← 監視D */
-#endif
             /* --- 3) 時間方向EMAで平滑化（視覚/判定ともに安定化） --- */
-        #if USE_EMA
+#if USE_EMA
             if (!g_ema_init){
                 for (int j=0;j<BIN128;j++) g_psd_ema[j] = spec128[j];
                 g_ema_init = 1;
@@ -586,9 +483,9 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
                 for (int j=0;j<BIN128;j++) g_psd_ema[j] = EMA_BETA*g_psd_ema[j] + (1.0f-EMA_BETA)*spec128[j];
             }
             const float* p128 = g_psd_ema;
-        #else
+#else
             const float* p128 = spec128;
-        #endif
+#endif
 
             sanitize_inplace(g_psd_ema, BIN128, 1e20f);
             dbg_array_stats("SPEC128(ema)", g_psd_ema, BIN128);
@@ -656,7 +553,7 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             msg_ai_req_t ai;
             memset(&ai, 0, sizeof(ai));
 
-            /* タイムスタンプはそのまま継承（構造体に tim がある前提） */
+            /* タイムスタンプはそのまま継承 */
             ai.tim = mir->tim;
 
             /* 可視化/学習には平滑済みスペクトル p128 を使用（128bin） */
@@ -675,6 +572,8 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
             send_ai_req(TRUE, &ai);
 
         }
+
+        // MSGID_TAI_RES受信ならば、、、
         else if (pum->msgid == MSGID_TAI_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
             msg_ai_res_t *pmar = (msg_ai_res_t *)&pum->pyload;
@@ -702,12 +601,14 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
                 send_led_req(TRUE, TLED_RED, TLED_PAT_ON, 0);
             }
 
-
-            //send_net_req(pum->result, pmar->tim, pmar->spectrum, SPEC_DIM);
         }
+
+        // MSGID_TNET_RES受信ならば、、、
         else if (pum->msgid == MSGID_TNET_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
         }
+
+        // MSGID_TLED_RES受信ならば、、、
         else if (pum->msgid == MSGID_TLED_RES) {
             APP_PRINT( "rcv_mbx TAPP:[%d][%d]\n", pum->msgid, pum->result );
         }
@@ -723,6 +624,7 @@ EXPORT void task_tapp(INT stacd, void *exinf) {
     }
 
 }
+
 
 /**
  * MSGID_TAI_REQを送信
@@ -756,54 +658,6 @@ LOCAL ER send_ai_req(INT result, msg_ai_req_t *data)
     memcpy(mar, data, sizeof(msg_ai_req_t));
 
     er = tk_snd_mbx( MBXID_TAI, (T_MSG *)pum );
-    if (er != E_OK) {
-        APP_ERR_PRINT("error snd_mbx:%d\n", er);
-        return er;
-    }
-
-    return E_OK;
-}
-
-
-/**
- * MSGID_TNET_REQを送信
- *
- * ネットワーク送信要求をTNETへ送信
- * @param[in] result 結果
- * @param[in] data 送信データへのポインタ
- * @return 処理結果
- * @retval E_OK 成功
-　* @retval !E_OK エラー(APIのエラー値)
- */
-LOCAL ER send_net_req(INT result, SYSTIM tim, const float *spectrum, size_t spectrum_len)
-{
-    ER er;
-    user_msg_t *pum = NULL;
-    msg_net_req_t *pmnr = NULL;
-
-    if (!spectrum || spectrum_len > (IMU_REC_MAX /2)) return E_PAR;
-
-    // 固定長メモリを取得
-    er = tk_get_mpf(MPFID_MEDIUM, (void **)&pum, TMO_FEVR);
-    if (er != E_OK) {
-        APP_ERR_PRINT("error get_mpf:%d", er);
-       return er;
-    }
-
-    // メッセージ構造体を作成
-    memset(pum, 0x00, sizeof(user_msg_t));
-    pum->msgid  = MSGID_TNET_REQ;
-    pum->srctsk = TSKID_TAPP;
-    pum->dsttsk = TSKID_TNET;
-    pum->result = (UH)result;
-    pum->mpfid  = MPFID_MEDIUM;
-
-    pmnr = (msg_net_req_t *)&pum->pyload;
-    pmnr->tim = tim;
-    memcpy(pmnr->spectrum, spectrum, spectrum_len * sizeof(float32_t));
-
-    // メッセージ送信
-    er = tk_snd_mbx( MBXID_TNET, (T_MSG *)pum );
     if (er != E_OK) {
         APP_ERR_PRINT("error snd_mbx:%d\n", er);
         return er;
@@ -859,4 +713,3 @@ LOCAL ER send_led_req(INT result, UB led, UB pattern, W blink_count)
 
     return E_OK;
 }
-

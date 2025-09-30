@@ -54,7 +54,4 @@ static const float mlp_b1[1] = {
 };
 
 
-
-
-
 #endif /* TAI_H_ */

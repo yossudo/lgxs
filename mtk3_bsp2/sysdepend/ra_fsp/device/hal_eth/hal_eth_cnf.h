@@ -1,3 +1,13 @@
+/**
+ * イーサネットデバイスドライバ設定
+ *
+ * EK-RA8D1内蔵イーサネットのデバイスドライバ設定
+ *
+ * @file
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
+ */
 #ifndef _DEV_HAL_ETH_CNF_H_
 #define _DEV_HAL_ETH_CNF_H_
 
