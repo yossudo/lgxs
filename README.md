@@ -44,4 +44,6 @@ FFT 結果から得られた周波数スペストルを入力とし、CMSIS-NN �
 - プログラム計画書 - TRONプログラムコンテスト2025エントリ時に提出したプログラム計画書
   - https://github.com/yossudo/lgxs/blob/main/doc/sw_overview/20250418TRON%E3%83%97%E3%83%AD%E3%82%B3%E3%83%B32025%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%A0%E8%A8%88%E7%94%BB%E6%9B%B8_LGXS.pdf
 - LGX-Shield紹介資料 - TRONプログラムコンテスト2025応募時に提出したLGX-Shield紹介資料
-  - https://github.com/yossudo/lgxs/blob/main/doc/sw_overview/20250930LGX-Shield%E7%B4%B9%E4%BB%8B%E8%B3%87%E6%96%99.pdf 
+  - https://github.com/yossudo/lgxs/blob/main/doc/sw_overview/20250930LGX-Shield%E7%B4%B9%E4%BB%8B%E8%B3%87%E6%96%99.pdf
+- ソフトウェア仕様書(タスク仕様書)
+  - https://github.com/yossudo/lgxs/blob/main/doc/sw_spec/
