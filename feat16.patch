@@ -1,0 +1,54 @@
+diff --git a/Application/tai.c b/Application/tai.c
+index e69de29..abcd123 100644
+--- a/Application/tai.c
++++ b/Application/tai.c
+@@ -1,6 +1,26 @@
++// Added feature extraction 16-dimension support
++#include "user_res.h"
++
++static float32_t feat16[FEAT_DIM];
++
++static int run_inference_feat(const float32_t *feat, float *score_out) {
++    // Dummy inference: threshold on energy
++    float sum = 0.0f;
++    for (int i=0;i<FEAT_DIM;i++) sum += feat[i];
++    *score_out = sum / FEAT_DIM / 1000.0f; // normalized dummy score
++    return (*score_out > 0.5f) ? 1 : 0;    // 1=anomaly,0=normal
++}
++
+ void task_tai(INT stacd, void *exinf)
+ {
+-    // original empty body
++    while (1) {
++        msg_ai_req_t *preq;
++        if (rcv_mbx(TAI_MBXID,(T_MSG **)&preq,TMO_FEVR)==E_OK) {
++            float score;
++            int result = run_inference_feat(preq->feat,&score);
++            msg_ai_res_t *pout = (msg_ai_res_t*)get_mpf(TAI_MPFID);
++            pout->label=result;
++            pout->score=score;
++            snd_mbx(TAPP_MBXID,(T_MSG*)pout);
++        }
++    }
+ }
+diff --git a/Application/user_res.h b/Application/user_res.h
+index abcd123..def4567 100644
+--- a/Application/user_res.h
++++ b/Application/user_res.h
+@@ -10,6 +10,20 @@
+
++// Feature dimension for AI input
++#define FEAT_DIM 16
++
++typedef struct {
++    T_MSG msg;         // common header
++    float32_t feat[FEAT_DIM];  // feature vector (16-d)
++} msg_ai_req_t;
++
++typedef struct {
++    T_MSG msg;
++    int8_t label;      // 0=normal,1=anomaly
++    float   score;     // anomaly score 0-1
++} msg_ai_res_t;
++
+ #endif

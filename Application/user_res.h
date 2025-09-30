@@ -30,18 +30,20 @@ typedef enum {
  * タスク優先度（低いほど高優先度）
  *------------------------------------------*/
 typedef enum {
-    TPRI_TIMU  = 5,         // IMUデータ取得（正確に100Hzサンプリングさせたいため最高優先度で動作）
-    TPRI_TLED  = 8,         // LED制御
+    TPRI_TIMU  = 5,          // IMUデータ取得（正確に100Hzサンプリングさせたいため最高優先度で動作）
+    TPRI_TLED  = 8,          // LED制御
     TPRI_TNET  = 10,         // ネットワーク通信（UDP通知を即時処理）
-    TPRI_TAI   = 12,        // AI推論（FFT・AI推論を含む重処理）
-    TPRI_TAPP  = 20         // アプリケーション制御（全体統括）
+    TPRI_TAI   = 12,         // AI推論（FFT・AI推論を含む重処理）
+    TPRI_TAPP  = 20,         // アプリケーション制御（全体統括）
+    // 追加はここに
+    TPRI_NUM                 // タスク数（末尾）
 } task_pri_t;
 
 
 /*------------------------------------------
  * タスクスタックサイズ定義（単位：Byte）
  *------------------------------------------*/
-#define STKSZ_TAPP      2048
+#define STKSZ_TAPP      4096
 #define STKSZ_TAI       4096
 #define STKSZ_TIMU      1024
 #define STKSZ_TNET      2048
@@ -114,6 +116,9 @@ typedef struct {
 } user_msg_t;
 
 #define IMU_REC_MAX 1024
+#define FEAT_DIM 16
+#define SPEC_DIM 128
+
 
 typedef struct {
     SYSTIM tim;
@@ -121,18 +126,31 @@ typedef struct {
 } msg_imu_ind_t;
 
 typedef struct {
-    SYSTIM tim;
-    UH accz[IMU_REC_MAX];
+    SYSTIM tim;                /* ★ TAPP→TAI：時刻を渡す（既存TAPPで使用中） */
+    float  feat[FEAT_DIM];     /* 16次元特徴 */
+    float  spectrum[SPEC_DIM]; /* 128bin PSD(EMA) */
+    float  bin_hz;             /* 128binの1bin周波数刻み（例：0.390625） */
 } msg_ai_req_t;
 
 typedef struct {
-    SYSTIM tim;
-    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
+    int8_t label;              /* 0=safe,1=danger */
+    float  score;              /* 0..1 */
+    float  conf_anom;          /* ＝score */
+    float  conf_norm;          /* 1-score */
+
+    /* ★ 既存コードが参照しているので追加： */
+    SYSTIM tim;                /* TAIがREQから引き継いで返す */
+    float  spectrum[SPEC_DIM]; /* 可視化/UDP送信用にそのまま返す */
+    float  bin_hz;
+    float  feat[FEAT_DIM];
 } msg_ai_res_t;
 
 typedef struct {
     SYSTIM tim;
-    float32_t spectrum[IMU_REC_MAX /2];     // FFTスペクトル（片側）
+    float32_t spectrum[SPEC_DIM];  /* 128binスペクトル (TAPP→TNET) */
+    float  score;              // 0..1
+    float  bin_hz;             // 例: 0.390625
+    float  feat[FEAT_DIM];     // 16D特徴
 } msg_net_req_t;
 
 typedef struct {

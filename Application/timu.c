@@ -44,7 +44,7 @@ typedef struct {
 LOCAL void init_task_timu(void);
 LOCAL void init_gpt(void);
 EXPORT void task_timu(INT stacd, void *exinf);
-void gpt_handler(UINT intno);
+LOCAL void gpt_handler(UINT intno);
 LOCAL ER read2(ID dd, UB addr, UH *out);
 LOCAL ER read_mpu9250(ID dd, mpu9250_data_t *pmd);
 LOCAL void check_accel_config(ID dd);
@@ -190,7 +190,7 @@ EXPORT void task_timu(INT stacd, void *exinf) {
  * @return なし
  * @note GPTタイマの詳細設定はFSP Cofigurationで行うこと
  */
-void gpt_handler(UINT intno)
+LOCAL void gpt_handler(UINT intno)
 {
 
     volatile R_GPT0_Type *gpt = R_GPT0;   // 使用チャンネルに合わせて
@@ -276,8 +276,8 @@ LOCAL ER read_mpu9250(ID dd, mpu9250_data_t *pmd) {
     pmd->ay = ay;
     pmd->az = az;
     pmd->gx = gx;
-    pmd->gx = gx;
-    pmd->gx = gx;
+    pmd->gy = gy;
+    pmd->gz = gz;
     pmd->temp = temp;
 
     return E_OK;

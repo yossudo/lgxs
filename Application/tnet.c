@@ -27,9 +27,11 @@
 
 /* 送信先/送信元のMAC/IP/PORTは必要に応じて調整してください */
 #define SRC_MAC  {0x74, 0x90, 0x50, 0xB0, 0xDD, 0x2A}
-#define DST_MAC  {0x00, 0xE0, 0x4C, 0x68, 0x03, 0x24}  /* 例：udpホスト(blitz) */
+//#define DST_MAC  {0x00, 0xE0, 0x4C, 0x68, 0x03, 0x24}  /* 例：udpホスト(blitz) */
+#define DST_MAC  {0xb8, 0x27, 0xeb, 0xe0, 0xf0, 0xa6}    /* 例：udpホスト(RaspberryPi3) */
 #define SRC_IP   {192, 168, 137, 5}
-#define DST_IP   {192, 168, 137, 1}                    /* 例：udpホスト(blitz) */
+//#define DST_IP   {192, 168, 137, 1}                    /* 例：udpホスト(blitz) */
+#define DST_IP   {192, 168, 137, 10}                     /* 例：udpホスト(RaspberryPi3) */
 #define SRC_PORT 12345
 #define DST_PORT 12345
 
@@ -156,9 +158,14 @@ static ER send_udp_packet(ID dd, const uint8_t *payload, uint16_t payload_len)
     return er;
 }
 
-/* CSVペイロード構築：ts/result/メタ情報/FFT配列 */
-static int build_fft_csv(char *dst, size_t cap,
-                         SYSTIM ts, const float *spec, size_t n, int result)
+
+static int build_fft_csv_ex(char *dst, size_t cap,
+                            SYSTIM ts,
+                            const float *spec, size_t n,
+                            int result,
+                            float score,
+                            const float *feat, size_t feat_dim,
+                            float bin_hz)
 {
     if (!dst || !spec || cap < 32) return -1;
 
@@ -166,10 +173,10 @@ static int build_fft_csv(char *dst, size_t cap,
     const unsigned long long ts_us = systim_to_u64(ts);
     const unsigned long ts_val = (unsigned long)ts_us;
 
-    /* ヘッダ部（ts, result, n, bin_hz） */
+    /* ヘッダ部（ts, result, score, n, bin_hz） */
     int w = snprintf(dst + len, cap - len,
-                     "ts_us=%lu,result=%d,n=%u,bin_hz=%.6f,fft=",
-                     ts_val, result, (unsigned)n, (double)LGXS_BIN_HZ);
+                     "ts_us=%lu,result=%d,score=%.3f,n=%u,bin_hz=%.6f,fft=",
+                     ts_val, result, (double)score, (unsigned)n, (double)bin_hz);
     if (w < 0) return -2;
     len += (size_t)w;
 
@@ -177,13 +184,78 @@ static int build_fft_csv(char *dst, size_t cap,
     for (size_t i = 0; i < n; i += LGXS_DOWNSAMPLE) {
         if (len + 16 >= cap) break;  /* 余裕なければ打ち切り */
         w = snprintf(dst + len, cap - len,
-                     (i + LGXS_DOWNSAMPLE < n) ? LGXS_FLOAT_FMT "," : LGXS_FLOAT_FMT "\n",
+                     (i + LGXS_DOWNSAMPLE < n) ? LGXS_FLOAT_FMT "," : LGXS_FLOAT_FMT,
                      (double)spec[i]);
         if (w < 0) return -3;
         len += (size_t)w;
     }
+
+    /* 特徴量の追記（任意） */
+    if (feat && feat_dim > 0) {
+        if (len + 8 >= cap) return (int)len;
+        dst[len++] = ','; dst[len++] = 'f'; dst[len++] = 'e'; dst[len++] = 'a';
+        dst[len++] = 't'; dst[len++] = '=';
+
+        for (size_t k = 0; k < feat_dim; k++) {
+            if (len + 16 >= cap) break;
+            w = snprintf(dst + len, cap - len,
+                         (k + 1 < feat_dim) ? "%.6f," : "%.6f",
+                         (double)feat[k]);
+            if (w < 0) return -4;
+            len += (size_t)w;
+        }
+    }
+
+    /* 終端（改行） */
+    if (len + 2 < cap) {
+        dst[len++] = '\n';
+        dst[len] = '\0';
+    }
     return (int)len;
 }
+
+
+static int build_fft_csv(char *dst, size_t cap,
+                         SYSTIM ts, const float *spec, size_t n, int result)
+{
+    /* 既定の bin_hz は従来の LGXS_BIN_HZ を流用し、score/feat は未出力 */
+    return build_fft_csv_ex(dst, cap, ts, spec, n, result,
+                            /* score */ -1.0f,
+                            /* feat  */ NULL, 0,
+                            /* bin_hz*/ (float)LGXS_BIN_HZ);
+}
+
+
+static int build_feat_csv(char *dst, size_t cap,
+                          SYSTIM ts, int result,
+                          float score, float bin_hz,
+                          const float *feat, size_t feat_dim)
+{
+    if (!dst || cap < 64) return -1;
+    size_t len = 0;
+    const unsigned long long ts_us = systim_to_u64(ts);
+    const unsigned long ts_val = (unsigned long)ts_us;
+
+    int w = snprintf(dst + len, cap - len,
+                     "ts_us=%lu,result=%d,score=%.3f,bin_hz=%.6f,feat=",
+                     ts_val, result, (double)score, (double)bin_hz);
+    if (w < 0) return -2;
+    len += (size_t)w;
+
+    if (feat && feat_dim > 0) {
+        for (size_t k = 0; k < feat_dim; k++) {
+            if (len + 16 >= cap) break;
+            w = snprintf(dst + len, cap - len,
+                         (k + 1 < feat_dim) ? "%.6f," : "%.6f",
+                         (double)feat[k]);
+            if (w < 0) return -3;
+            len += (size_t)w;
+        }
+    }
+    if (len + 2 < cap) { dst[len++] = '\n'; dst[len] = '\0'; }
+    return (int)len;
+}
+
 
 /*==============================*/
 /*  TNET タスク実装              */
@@ -232,6 +304,7 @@ LOCAL void init_task_tnet(void)
     }
 }
 
+
 /* TNET メインタスク */
 EXPORT void task_tnet(INT stacd, void *exinf)
 {
@@ -259,10 +332,9 @@ EXPORT void task_tnet(INT stacd, void *exinf)
                 /* 固有ペイロードを取り出す（timestamp + spectrum[]） */
                 msg_net_req_t *req = (msg_net_req_t *)&pum->pyload;
 
-                /* CSV生成（ts/result/メタ情報/FFT） */
                 static char csv[1400];
                 int len = build_fft_csv(csv, sizeof(csv),
-                                        req->tim, req->spectrum, IMU_REC_MAX /2,
+                                        req->tim, req->spectrum, SPEC_DIM,
                                         (int)ai_result);
                 if (len < 0) {
                     APP_ERR_PRINT("[TNET] build_fft_csv err:%d\n", len);
@@ -270,19 +342,42 @@ EXPORT void task_tnet(INT stacd, void *exinf)
                 } else {
                     /* UDP送信（片方向・応答なし） */
                     ER snd = send_udp_packet(s_eth_dd, (const uint8_t *)csv, (uint16_t)len);
+#if 0
                     if (snd < E_OK) {
                         APP_ERR_PRINT("[TNET] UDP send error=%d\n", snd);
                     } else {
                         APP_PRINT("[TNET] UDP sent %dB (ts+FFT)\n", len);
                     }
+#endif
                     send_net_res((snd < E_OK) ? E_IO : E_OK);
                 }
-            } else {
-                APP_ERR_PRINT("[TNET] ether device not opened.\n");
-                send_net_res(E_IO);
+
+                {
+                    float score  = -1.0f;
+                    float bin_hz = (float)LGXS_BIN_HZ;
+                    const float *feat_ptr = NULL;
+                    size_t feat_dim = 0;
+
+                    score = req->score;
+                    bin_hz = req->bin_hz;
+                    feat_ptr = req->feat;
+                    feat_dim = FEAT_DIM;
+
+                    static char feat_csv[700];
+                    int len2 = build_feat_csv(feat_csv, sizeof(feat_csv),
+                                              req->tim, (int)ai_result,
+                                              score, bin_hz,
+                                              feat_ptr, feat_dim);
+                    if (len2 > 0) {
+                        send_udp_packet(s_eth_dd, (const uint8_t*)feat_csv, (uint16_t)len2);
+                    }
+                }
+
             }
-        } else {
-            APP_ERR_PRINT("[TNET] unexpected msgid=%d\n", pum->msgid);
+            else {
+                APP_ERR_PRINT("[TNET] unexpected msgid=%d\n", pum->msgid);
+            }
+
         }
 
         /* メモリ返却 */

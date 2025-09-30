@@ -1,18 +1,16 @@
-#ifndef TLED_H_
-#define TLED_H_
-
 /*
- * TLED - ボードLED制御タスク (RA8D1 EK)
- * - FSPのGPIOピン定義（USER_LED3_RED / USER_LED3_BLUE / USER_LED3_GREEN）を利用
- * - T-Kernel メールボックスで要求/応答
+ * LED制御タスク(EK-RA8D1)
  *
- * 必要な user_res.h の追加（例）:
- *   - タスクID:   TSKID_TLED
- *   - メールボックスID: MBXID_TLED
- *   - メッセージID: MSGID_TLED_REQ, MSGID_TLED_RES
+ * @file
  *
- * 要求ペイロードは本ヘッダの tled_req_t を user_msg_t::pyload に詰める
+ * @note FSPのGPIOピン定義（USER_LED3_RED / USER_LED3_BLUE / USER_LED3_GREEN）を利用
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
  */
+
+#ifndef _TLED_H_
+#define _TLED_H_
 
 #include "user_common.h"
 
