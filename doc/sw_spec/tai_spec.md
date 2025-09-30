@@ -1,72 +1,121 @@
 # TAIタスク仕様書
 
-## はじめに
-本仕様書は、LGX-ShieldシステムにおけるAI推論タスク（TAI）のソフトウェア仕様を示すものである。  
-TAIは加速度センサから得られたサンプルデータに対して信号処理および推論処理を行い、異常傾向を検出してアプリケーションタスク（TAPP）へ通知する役割を担う。
+## 1. 概要
+TAIタスクは、TAPPから受け取った16次元特徴量に対してAI推論を実行し、推論結果と可視化用128binスペクトルをTAPPへ返却する。  
+本タスクはメールボックスによる非同期メッセージ受信を契機に動作し、内部で多層パーセプトロン（MLP）による推論を行う。
 
----
+## 2. 使用デバイス・モジュール
+- 推論モデル: 2層MLP (ReLU + Sigmoid)
+- 活性化関数:
+  - ReLU: max(0, x)
+  - Sigmoid: 1 / (1 + exp(-x))
+- メモリプール: MPFID_MEDIUM (応答メッセージ)
+- メールボックス: MBXID_TAI (入力), MBXID_TAPP (出力)
 
-## 機能概要
-TAIは以下の機能を提供する。
+## 3. 入出力仕様
+### 入力
+- 宛先タスク: TAI
+- メッセージID: MSGID_TAI_REQ
+- メッセージ構造体: msg_ai_req_t
+  - tim: 計測時刻
+  - feat[16]: 特徴ベクトル
+  - spectrum[128]: スペクトルデータ
+  - bin_hz: 周波数分解能
 
-1. **センサデータ受領**  
-   TAPPから通知される加速度Z軸データ（1024サンプル）を受信する。
+### 出力
+- 宛先タスク: TAPP
+- メッセージID: MSGID_TAI_RES
+- メッセージ構造体: msg_ai_res_t
+  - tim: 計測時刻
+  - spectrum[128]: 入力スペクトルをコピー
+  - feat[16]: 入力特徴ベクトルをコピー
+  - label: 推論結果 (0: 正常, 1: 異常)
+  - score: 異常スコア (0.0～1.0)
+  - conf_anom: 異常確信度 (score)
+  - conf_norm: 正常確信度 (1.0 - score)
+  - bin_hz: 周波数分解能
 
-2. **FFTによる周波数解析**  
-   CMSIS-DSPライブラリを用いて高速フーリエ変換（FFT）を実施し、振動の主要成分を抽出する。
+## 4. 処理仕様
+### 推論処理
+1. 入力特徴量 (16次元) を1層目 (feat→hidden) に入力
+   - sum = feat[i] * mlp_w0 + mlp_b0
+   - 活性化関数: ReLU
+2. hiddenを2層目に入力 (hidden→出力)
+   - sum = hidden[j] * mlp_w1 + mlp_b1
+   - 活性化関数: Sigmoid
+3. 出力スコア (0.0～1.0) を算出
+   - score >= 0.5 → label=1 (異常)
+   - score < 0.5 → label=0 (正常)
 
-3. **異常判定**  
-   最大周波数成分を算出し、閾値（20Hz）を基準に簡易的な異常判定を行う。  
-   判定結果は将来的にニューラルネットワーク推論に置き換え可能。
+### メイン処理
+1. MBXID_TAIからメッセージ受信 (tk_rcv_mbx)
+2. 受信メッセージがMSGID_TAI_REQであればAI推論を実行
+3. 結果をmsg_ai_res_tに格納し、TAPPへ送信
+4. 入力メッセージ用メモリを解放 (tk_rel_mpf)
 
-4. **結果通知**  
-   判定結果をTAPPへ送信する。
+### エラーハンドリング
+- メッセージ受信エラー: ログ出力後continue
+- メモリプール取得失敗: ログ出力、入力メッセージ解放
+- 想定外メッセージID: エラーログ出力
 
----
+## 5. データ構造
+### 特徴ベクトル (msg_ai_req_t)
+```c
+typedef struct {
+    SYSTIM tim;
+    float32_t feat[16];
+    float32_t spectrum[128];
+    float32_t bin_hz;
+} msg_ai_req_t;
+```
 
-## 機能詳細
+### 推論結果 (msg_ai_res_t)
+```c
+typedef struct {
+    SYSTIM tim;
+    float32_t spectrum[128];
+    float32_t feat[16];
+    int8_t label;
+    float32_t score;
+    float32_t conf_anom;
+    float32_t conf_norm;
+    float32_t bin_hz;
+} msg_ai_res_t;
+```
 
-### 1. タスク初期化
-- **関数名**: `init_task_tai`  
-- **処理内容**: 初期化処理。現状は空の実装だが、AI推論モデルや内部バッファ初期化の拡張余地を持つ。
+## 6. エラー処理
+- 受信失敗時: APP_ERR_PRINTでログ出力
+- メモリ確保失敗時: ログ出力、入力メッセージ解放
+- 不正msgid受信時: エラーログ出力
 
----
+## 7. ログ出力
+- [TAI started]
+- [TAI] inference done: result=%d score=%d.%03d
+- [TAI] rcv_mbx err=%d
+- [TAI] get_mpf err=%d
+- [TAI] unexpected msgid=%d
 
-### 2. タスクメイン
-- **関数名**: `task_tai`  
-- **処理内容**:  
-  1. メールボックス `MBXID_TAI` からメッセージを受信する。  
-  2. メッセージ中の加速度Z軸データを取り出し、FFTおよび推論処理を実行する。  
-  3. 推論結果をTAPPへ通知する。  
-- **特徴**: メッセージ駆動型で動作し、受信ごとにFFT解析と異常判定を実施する。
+## 8. 既知の不具合・注意事項
+- スコア算出のしきい値は0.5で固定されているが、運用で調整可能
+- scoreの安定化パラメータ (TAI_SCORE_ALPHA, TAI_SCORE_FLOOR) が定義されているが、現状run_inference_feat内では未使用
 
----
+## 9. シーケンス図
+```mermaid
+sequenceDiagram
+  participant TAPP as TAPPタスク
+  participant TAI as TAIタスク
+  participant MLP as AI推論処理
 
-### 3. 信号処理および推論
-- **関数名**: `run_fft_and_infer`  
-- **処理内容**:  
-  1. CMSIS-DSPライブラリを用いてRFFT（実数FFT）を初期化。  
-  2. 入力データをfloat型に変換し、平均値を除去（DCオフセット補正）。  
-  3. FFTを実行し、複素数結果を振幅スペクトルへ変換。  
-  4. 最大振幅成分を探索し、その周波数を算出。  
-  5. 周波数閾値と比較して異常判定を実施。  
+  TAPP->>TAI: MSGID_TAI_REQ (feat, spectrum)
+  TAI->>MLP: run_inference_feat()
+  MLP-->>TAI: result, score
+  TAI->>TAPP: MSGID_TAI_RES (結果, スペクトル, 特徴)
+  TAI->>TAI: tk_rel_mpf(pum)
+```
 
----
-
-### 4. 判定結果送信
-- **関数名**: `send_ai_res`  
-- **処理内容**:  
-  - 固定長メモリプール `MPFID_SMALL` からメッセージ領域を確保。  
-  - 判定結果を `MSGID_TAI_RES` としてTAPPに送信する。  
-
----
-
-## その他
-1. **リアルタイム性**  
-   FFTサイズは1024サンプル、サンプリング周期は100Hzであり、約10.24秒ごとの周波数解析を行う。リアルタイムに近い形で異常傾向の検出が可能である。  
-
-2. **拡張性**  
-   現在は閾値による簡易判定ロジックを実装しているが、CMSIS-NNを利用した軽量ニューラルネットワーク推論への置換が可能であり、拡張性を備えている。  
-
-3. **役割**  
-   TAIはシステムにおける「解析・判定エンジン」として、物理センサデータを解析し、異常の有無を上位タスクへ伝達する重要なタスクである。  
+## 10. テスト項目
+- MSGID_TAI_REQを受信後、MSGID_TAI_RESが返却されること
+- scoreの範囲が0.0～1.0であること
+- conf_anom + conf_norm ≈ 1.0となること
+- 不正msgidを受信した場合、エラーログが出力されること
+- メモリリークが発生しないこと

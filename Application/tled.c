@@ -1,12 +1,15 @@
 /*
- * tled.cpp - LED制御タスク
+ * LED制御タスク
  *
- * 仕様:
- *  - 他タスクからの MSGID_TLED_REQ を受信し、LED(赤/青/緑)を独立制御
- *  - パターン: 点灯, 消灯, 速点滅(100ms), 遅点滅(500ms)
- *  - 点滅回数: n回 または 無限(TLED_BLINK_INFINITE)
- *  - 100ms周期で内部タイマ駆動
- *  - 応答: MSGID_TLED_RES（同期用。ペイロードなし）
+ * @file
+ *
+ * @note 他タスクからの MSGID_TLED_REQ を受信し、LED(赤/青/緑)を独立制御
+ * @note パターン: 点灯, 消灯, 速点滅(100ms), 遅点滅(500ms)
+ * @note 点滅回数: n回 または 無限(TLED_BLINK_INFINITE)
+ * @note 100ms周期で内部タイマ駆動
+ *
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
  */
 
 #include "tled.h"
@@ -88,18 +91,6 @@ static void led_apply_pattern(tled_id_t id, tled_pattern_t pat, W count)
     }
 }
 
-/* ブリンクの1サイクル消化をカウントダウン（必要なら） */
-static inline void led_consume_cycle_if_needed(tled_id_t id, bool toggled_to_on)
-{
-    tled_sm_t *pls = &s_led[id];
-    if (pls->pat == TLED_PAT_BLINK_FAST || pls->pat == TLED_PAT_BLINK_SLOW)
-    {
-        /* 「ONに入った瞬間」を1回としてカウント */
-        if (toggled_to_on && pls->blink_rem > 0) {
-            pls->blink_rem--;
-        }
-    }
-}
 
 /* 100msごとのタイマ処理（各LEDを更新） */
 static void led_tick(void)

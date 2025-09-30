@@ -1,15 +1,14 @@
-/*
- *----------------------------------------------------------------------
- *    micro T-Kernel 3.0 BSP 2.0
+/**
+ * イーサネットデバイスドライバ
  *
- *    Copyright (C) 2023-2024 by Ken Sakamura.
- *    This software is distributed under the T-License 2.1.
- *----------------------------------------------------------------------
+ * EK-RA8D1内蔵イーサネットのデバイスドライバ
  *
- *    Released by TRON Forum(http://www.tron.org) at 2024/03.
+ * @file
  *
- *----------------------------------------------------------------------
+ * @date 2025/7/5
+ * @author: Things Base y.sudo
  */
+
 #include <sys/machine.h>
 #include <config_bsp/ra_fsp/config_bsp.h>
 
