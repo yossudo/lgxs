@@ -41,9 +41,7 @@ FFT 結果から得られた周波数スペストルを入力とし、CMSIS-NN �
 このように、LGX ShieldはT-Kernel上において加速度センサからの周期データ取得・信号解析・AI推論・通知までを一貫して実装し、再現性の高い片持ち梁型の疑似構造モデルを用いて現実的な実証試験を行うことができる構成とする。
 
 ## 参考ドキュメント
-- プログラム計画書 - TRONプログラムコンテスト2025エントリ時に提出したプログラム計画書
-  - https://github.com/yossudo/lgxs/blob/main/doc/sw_overview/20250418TRON%E3%83%97%E3%83%AD%E3%82%B3%E3%83%B32025%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%A0%E8%A8%88%E7%94%BB%E6%9B%B8_LGXS.pdf
-- LGX-Shield紹介資料 - TRONプログラムコンテスト2025応募時に提出したLGX-Shield紹介資料
-  - https://github.com/yossudo/lgxs/blob/main/doc/sw_overview/20250930LGX-Shield%E7%B4%B9%E4%BB%8B%E8%B3%87%E6%96%99.pdf
-- ソフトウェア仕様書(タスク仕様書)
-  - https://github.com/yossudo/lgxs/blob/main/doc/sw_spec/
+- [プログラム計画書](doc/sw_overview/20250418TRON%E3%83%97%E3%83%AD%E3%82%B3%E3%83%B32025%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%A0%E8%A8%88%E7%94%BB%E6%9B%B8_LGXS.pdf) - TRONプログラミングコンテスト2025エントリ時に提出したプログラム計画書
+- [LGX-Shield紹介資料](doc/sw_overview/20250930LGX-Shield%E7%B4%B9%E4%BB%8B%E8%B3%87%E6%96%99.pdf) - TRONプログラミングコンテスト2025応募時に提出したLGX-Shield紹介資料 
+- [ソフトウェア仕様書(タスク仕様書)](doc/sw_spec/)
+- [TRONプログラミングコンテストに送付した検証セットのメモ](cantilever_tool.md) 
