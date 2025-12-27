@@ -39,9 +39,17 @@ FFT 結果から得られた周波数スペストルを入力とし、CMSIS-NN �
 異常判定の有無、クラウド通知の成否、動作状態をLEDによりフィードバック表示し、現場での設置や検証作業を支援する。
 
 このように、LGX ShieldはT-Kernel上において加速度センサからの周期データ取得・信号解析・AI推論・通知までを一貫して実装し、再現性の高い片持ち梁型の疑似構造モデルを用いて現実的な実証試験を行うことができる構成とする。
+![システム構成等](https://www.tron.org/ja/wp-content/uploads/sites/2/2025/12/02.png)
 
 ## 参考ドキュメント
 - [プログラム計画書](doc/sw_overview/20250418TRON%E3%83%97%E3%83%AD%E3%82%B3%E3%83%B32025%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%A0%E8%A8%88%E7%94%BB%E6%9B%B8_LGXS.pdf) - TRONプログラミングコンテスト2025エントリ時に提出したプログラム計画書
 - [LGX-Shield紹介資料](doc/sw_overview/20250930LGX-Shield%E7%B4%B9%E4%BB%8B%E8%B3%87%E6%96%99.pdf) - TRONプログラミングコンテスト2025応募時に提出したLGX-Shield紹介資料 
 - [ソフトウェア仕様書(タスク仕様書)](doc/sw_spec/)
-- [TRONプログラミングコンテストに送付した検証セットのメモ](cantilever_tool.md) 
+- [TRONプログラミングコンテストに送付した検証セットのメモ](cantilever_tool.md)
+
+## TRONプログラミングコンテスト2025 優秀賞受賞！
+- [TRONプログラミングコンテスト2025・結果発表](https://www.tron.org/ja/programming_contest-2025/programming_contest_2025_awards/) - 2025 TRON Symposium-TRONSHOW- @渋谷パルコDGビル18Fカンファレンスホール「Dragon Gate」にて表彰式に参加！(2025/12/11)
+  ![集合写真](https://www.tron.org/ja/wp-content/uploads/sites/2/2025/12/71f3edca64830cbcbe144d4a994baa8a.jpg)
+- [TRONプログラミングコンテスト2025表彰式発表向け資料](doc/sw_overview/20251204LGX-Shield発表資料.pptx) - 表彰式でのピッチ資料
+- [TRONプログラミングコンテスト2025表彰式発表向け資料(english)](doc/sw_overview/20251204LGX-Shield_presentation.pptx) - Presentation for the Award Ceremony
+- [TRONプログラミングコンテスト2025表彰作品一覧冊子向け資料](doc/sw_overview/20251110表彰作品一覧冊子用原稿_須藤.docx) - 表彰作品一覧冊子向け原稿
