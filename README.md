@@ -47,7 +47,7 @@ FFT 結果から得られた周波数スペストルを入力とし、CMSIS-NN �
 - [ソフトウェア仕様書(タスク仕様書)](doc/sw_spec/)
 - [TRONプログラミングコンテストに送付した検証セットのメモ](cantilever_tool.md)
 
-## TRONプログラミングコンテスト2025 優秀賞受賞！
+## TRONプログラミングコンテスト2025 優秀賞をいただきました！
 - [TRONプログラミングコンテスト2025・結果発表](https://www.tron.org/ja/programming_contest-2025/programming_contest_2025_awards/) - 2025 TRON Symposium-TRONSHOW- @渋谷パルコDGビル18Fカンファレンスホール「Dragon Gate」にて表彰式に参加！(2025/12/11)
   ![集合写真](https://www.tron.org/ja/wp-content/uploads/sites/2/2025/12/71f3edca64830cbcbe144d4a994baa8a.jpg)
 - [TRONプログラミングコンテスト2025表彰式発表向け資料](doc/sw_overview/20251204LGX-Shield発表資料.pptx) - 表彰式でのピッチ資料
